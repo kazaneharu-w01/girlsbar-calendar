@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Plus, Trash2, Star, Image as ImageIcon, UserPlus, Settings, Save, RotateCcw, AlertCircle, Cake } from 'lucide-react';
+import { Download, Plus, Trash2, Star, Image as ImageIcon, UserPlus, Settings, Save, RotateCcw, AlertCircle, Cake, MoveVertical } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 // --- 型定義 ---
@@ -13,6 +13,9 @@ type Shift = {
   type: ShiftType;
   isBD?: boolean;
 };
+
+// 【修正点3】イベントデータをオブジェクトに変更（日付: タイトル）
+type EventMap = { [key: number]: string };
 
 // --- 設定: シフトの見た目 ---
 const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string }> = {
@@ -29,7 +32,9 @@ export default function CalendarApp() {
   const [month, setMonth] = useState(1);
   const [isSecondHalf, setIsSecondHalf] = useState(true);
   const [shifts, setShifts] = useState<Shift[]>([]);
-  const [eventDays, setEventDays] = useState<number[]>([]);
+  
+  // イベント管理（配列からMapに変更）
+  const [eventMap, setEventMap] = useState<EventMap>({});
   
   // 画像設定
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
@@ -39,6 +44,8 @@ export default function CalendarApp() {
   const [bgZoom, setBgZoom] = useState(100);
   const [bgX, setBgX] = useState(50);
   const [bgY, setBgY] = useState(50);
+  // 【修正点2】余白調整用パラメータ
+  const [headerGap, setHeaderGap] = useState(20);
 
   const [registeredCasts, setRegisteredCasts] = useState<string[]>(['キャストA', 'キャストB', 'キャストC']);
   
@@ -49,7 +56,10 @@ export default function CalendarApp() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [inputName, setInputName] = useState('');
   const [inputType, setInputType] = useState<ShiftType>('早');
+  
+  // モーダル用一時ステート
   const [isEventInput, setIsEventInput] = useState(false);
+  const [eventTitleInput, setEventTitleInput] = useState(''); // イベントタイトル用
   const [isBDInput, setIsBDInput] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -91,17 +101,28 @@ export default function CalendarApp() {
   // --- データ読み込み ---
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v2');
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v3'); // バージョンアップ
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
-        if (parsed.eventDays) setEventDays(parsed.eventDays);
+        
+        // 旧データ(配列)からの移行対応
+        if (parsed.eventMap) {
+          setEventMap(parsed.eventMap);
+        } else if (parsed.eventDays) {
+          // 旧型式(number[])の場合は変換
+          const newMap: EventMap = {};
+          parsed.eventDays.forEach((d: number) => { newMap[d] = 'イベント'; });
+          setEventMap(newMap);
+        }
+
         if (parsed.registeredCasts) setRegisteredCasts(parsed.registeredCasts);
         if (parsed.backgroundImage) setBackgroundImage(parsed.backgroundImage);
         if (parsed.logoImage) setLogoImage(parsed.logoImage);
         if (parsed.bgZoom) setBgZoom(parsed.bgZoom);
         if (parsed.bgX !== undefined) setBgX(parsed.bgX);
         if (parsed.bgY !== undefined) setBgY(parsed.bgY);
+        if (parsed.headerGap !== undefined) setHeaderGap(parsed.headerGap);
         if (parsed.year) setYear(parsed.year);
         if (parsed.month) setMonth(parsed.month);
       }
@@ -129,11 +150,11 @@ export default function CalendarApp() {
   useEffect(() => {
     if (!isLoaded) return;
     const dataToSave = {
-      shifts, eventDays, registeredCasts, backgroundImage, logoImage,
-      year, month, bgZoom, bgX, bgY
+      shifts, eventMap, registeredCasts, backgroundImage, logoImage,
+      year, month, bgZoom, bgX, bgY, headerGap
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v2', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v3', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       console.error("保存失敗:", e);
@@ -141,7 +162,7 @@ export default function CalendarApp() {
         setSaveError('保存容量がいっぱいです。背景画像を削除してください。');
       }
     }
-  }, [shifts, eventDays, registeredCasts, backgroundImage, logoImage, year, month, bgZoom, bgX, bgY, isLoaded]);
+  }, [shifts, eventMap, registeredCasts, backgroundImage, logoImage, year, month, bgZoom, bgX, bgY, headerGap, isLoaded]);
 
   // --- ロジック ---
   const getDaysArray = () => {
@@ -158,6 +179,8 @@ export default function CalendarApp() {
 
   const addShift = () => {
     if (!selectedDay) return;
+    
+    // シフト追加
     if (inputName) {
       const newShift: Shift = {
         id: Math.random().toString(36).substr(2, 9),
@@ -168,11 +191,17 @@ export default function CalendarApp() {
       };
       setShifts([...shifts, newShift]);
     }
+
+    // イベント更新
+    const newEventMap = { ...eventMap };
     if (isEventInput) {
-      if (!eventDays.includes(selectedDay)) setEventDays([...eventDays, selectedDay]);
+      newEventMap[selectedDay] = eventTitleInput || 'EVENT';
     } else {
-      setEventDays(eventDays.filter(d => d !== selectedDay));
+      delete newEventMap[selectedDay];
     }
+    setEventMap(newEventMap);
+    
+    // リセット
     setInputName('');
     setIsBDInput(false);
     setIsModalOpen(false);
@@ -192,7 +221,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v2');
+      localStorage.removeItem('girlsbar_calendar_data_v3');
       window.location.reload();
     }
   };
@@ -208,49 +237,66 @@ export default function CalendarApp() {
     }
   };
 
-  // 【修正点1】軽量化保存ロジック (Blob使用)
+  // 【修正点1】リトライ機能付き保存ロジック
   const downloadImage = async () => {
     if (!calendarRef.current) return;
-    try {
-      calendarRef.current.classList.add('generating-image');
-      
-      const canvas = await html2canvas(calendarRef.current, {
-        scale: 1.5, // 少し画質を上げる（Blobなら耐えられる可能性が高いため）
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null,
-        logging: false,
-      });
-      
-      calendarRef.current.classList.remove('generating-image');
-
-      // Blobとして出力（メモリ消費を抑える）
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          alert('画像の生成に失敗しました。');
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.download = `${year}年${month}月${isSecondHalf ? '後半' : '前半'}シフト.png`;
-        link.href = url;
-        link.click();
+    
+    const generate = async (scale: number) => {
+      calendarRef.current!.classList.add('generating-image');
+      try {
+        const canvas = await html2canvas(calendarRef.current!, {
+          scale: scale, // 指定倍率で描画
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: null,
+          logging: false,
+        });
         
-        // メモリ解放
-        setTimeout(() => URL.revokeObjectURL(url), 100);
-      }, 'image/png', 0.9);
+        calendarRef.current!.classList.remove('generating-image');
 
+        // Blob出力
+        return new Promise<void>((resolve, reject) => {
+          canvas.toBlob((blob) => {
+            if (!blob) { reject('Blob generation failed'); return; }
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = `${year}年${month}月${isSecondHalf ? '後半' : '前半'}シフト.png`;
+            link.href = url;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+            resolve();
+          }, 'image/png', 0.9);
+        });
+
+      } catch (err) {
+        calendarRef.current!.classList.remove('generating-image');
+        throw err;
+      }
+    };
+
+    try {
+      // まず標準画質(1.0)でトライ
+      await generate(1.0);
     } catch (err) {
-      console.error('画像生成エラー:', err);
-      alert('保存に失敗しました。スマホのメモリ不足の可能性があります。アプリを再起動してみてください。');
-      calendarRef.current.classList.remove('generating-image');
+      console.warn('1.0x failed, retrying with 0.8x...', err);
+      try {
+        // 失敗したら低画質(0.8)でリトライ
+        await generate(0.8);
+        alert('メモリ不足のため、少し画質を落として保存しました。');
+      } catch (retryErr) {
+        console.error('All save attempts failed', retryErr);
+        alert('保存に失敗しました。アプリを再起動するか、他のアプリを終了してから試してください。');
+      }
     }
   };
 
   const openModal = (day: number) => {
     setSelectedDay(day);
     setInputName('');
-    setIsEventInput(eventDays.includes(day));
+    // イベント状態の復元
+    const title = eventMap[day];
+    setIsEventInput(!!title);
+    setEventTitleInput(title || '');
     setIsBDInput(false);
     setIsModalOpen(true);
   };
@@ -352,20 +398,35 @@ export default function CalendarApp() {
                   {backgroundImage && (
                     <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
                       <div className="flex items-center gap-2">
-                         <span className="text-xs font-bold w-8">Zoom</span>
+                         <span className="text-xs font-bold w-12 text-right">Zoom</span>
                          <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                       </div>
                       <div className="flex items-center gap-2">
-                         <span className="text-xs font-bold w-8">横</span>
+                         <span className="text-xs font-bold w-12 text-right">横位置</span>
                          <input type="range" min="0" max="100" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                       </div>
                       <div className="flex items-center gap-2">
-                         <span className="text-xs font-bold w-8">縦</span>
+                         <span className="text-xs font-bold w-12 text-right">縦位置</span>
                          <input type="range" min="0" max="100" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                       </div>
                     </div>
                   )}
                 </div>
+
+                {/* 【修正点2】余白調整スライダー */}
+                <div className="border-t pt-2">
+                  <div className="flex items-center gap-2">
+                     <MoveVertical size={14} className="text-gray-600"/>
+                     <span className="text-xs font-bold w-20">隙間サイズ</span>
+                     <input 
+                       type="range" min="0" max="300" step="10" 
+                       value={headerGap} 
+                       onChange={(e) => setHeaderGap(Number(e.target.value))} 
+                       className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" 
+                     />
+                  </div>
+                </div>
+
                 <div className="pt-2 border-t mt-2">
                    <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> 全データリセット</button>
                 </div>
@@ -397,12 +458,10 @@ export default function CalendarApp() {
               }}
             >
               
-              {/* 【修正点3】余白の短縮 (pt-4, mb-1 に変更) */}
               <div className="relative z-10 pt-4 pb-6 px-8">
                 {/* ヘッダー・ロゴ */}
-                <div className="text-center mb-1">
+                <div className="text-center">
                   
-                  {/* 【修正点2】ロゴサイズ調整 (h-[280px]程度に変更) */}
                   <div className="flex justify-center -mb-2">
                     <div className="w-full h-[280px] relative flex items-center justify-center"> 
                       <img 
@@ -424,6 +483,9 @@ export default function CalendarApp() {
                   </h1>
                 </div>
 
+                {/* 【修正点2】余白（スペーサー） */}
+                <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
+
                 {/* カレンダーグリッド */}
                 <div className="border-4 border-gray-900 bg-white/90 shadow-lg rounded-sm overflow-hidden">
                   <div className="grid grid-cols-7 bg-gray-800 text-white font-bold text-center border-b-4 border-gray-900">
@@ -437,7 +499,8 @@ export default function CalendarApp() {
                       const weekIndex = i % 7;
                       const isSun = weekIndex === 0;
                       const isSat = weekIndex === 6;
-                      const isEvent = day && eventDays.includes(day);
+                      const eventTitle = day ? eventMap[day] : undefined;
+                      const isEvent = !!eventTitle;
                       
                       let bgClass = 'bg-white/95'; 
                       if (isSun) bgClass = 'bg-pink-50/95';
@@ -453,8 +516,16 @@ export default function CalendarApp() {
                           {day && (
                             <>
                               <div className="flex justify-between items-start mb-1">
-                                <div className="h-6 w-6 flex items-center justify-center">
-                                  {isEvent && <Star size={20} className="text-yellow-500 fill-yellow-500 drop-shadow-sm" />}
+                                <div className="flex-1">
+                                  {/* 【修正点3】イベントタイトルの表示 */}
+                                  {isEvent && (
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <Star size={16} className="text-yellow-500 fill-yellow-500" />
+                                      <span className="text-[10px] font-black text-yellow-600 bg-yellow-100 px-1 rounded truncate max-w-[80px] border border-yellow-300">
+                                        {eventTitle}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className={`text-2xl font-black ${isSun?'text-pink-600':(isSat?'text-blue-600':'text-gray-700')}`}>
                                   {day}
@@ -508,11 +579,25 @@ export default function CalendarApp() {
                 <span className="bg-gray-100 w-10 h-10 flex items-center justify-center rounded-full">{selectedDay}</span>
                 <span className="text-base">日の設定</span>
               </h3>
-              <label className="flex flex-col items-center cursor-pointer gap-1">
-                 <input type="checkbox" checked={isEventInput} onChange={(e) => setIsEventInput(e.target.checked)} className="hidden" />
-                 <Star size={28} className={`transition-all ${isEventInput ? 'text-yellow-400 fill-yellow-400 scale-110' : 'text-gray-300'}`}/>
-                 <span className="text-[10px] font-bold text-gray-500">イベント日</span>
+            </div>
+            
+            {/* 【修正点3】イベントタイトル入力 */}
+            <div className={`mb-4 p-3 rounded-xl border transition-all ${isEventInput ? 'bg-yellow-50 border-yellow-300 shadow-sm' : 'bg-gray-50 border-transparent'}`}>
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700 mb-2">
+                <input type="checkbox" checked={isEventInput} onChange={(e) => setIsEventInput(e.target.checked)} className="w-5 h-5 accent-yellow-500 rounded" />
+                <Star size={20} className={isEventInput ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400'}/>
+                <span>イベント日設定</span>
               </label>
+              
+              {isEventInput && (
+                <input 
+                  type="text" 
+                  value={eventTitleInput}
+                  onChange={(e) => setEventTitleInput(e.target.value)}
+                  placeholder="イベント名 (例: 生誕祭)"
+                  className="w-full border border-yellow-300 p-2 rounded bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm font-bold"
+                />
+              )}
             </div>
             
             <hr className="my-4 border-gray-100"/>
