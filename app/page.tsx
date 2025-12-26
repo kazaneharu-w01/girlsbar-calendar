@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock } from 'lucide-react';
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 // --- 型定義 ---
@@ -12,7 +12,6 @@ type Shift = {
   castName: string;
   type: ShiftType;
   isBD?: boolean;
-  // 【追加】時間指定用
   timeRange?: string; 
 };
 
@@ -25,9 +24,9 @@ const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string 
   'その他': { bg: 'bg-orange-500', text: 'text-white', label: '他' },
 };
 
-// 時間リスト生成
-const HOURS_START = ['18', '19', '20', '21', '22', '23', '24', '1', '2', '3'];
-const HOURS_END = ['22', '23', '24', '1', '2', '3', '4', '5', '6', 'LAST'];
+// 時間リスト
+const HOURS_START = ['17','18','19','20','21','22','23','24','1','2','3'];
+const HOURS_END = ['21','22','23','24','1','2','3','4','5','6','7','LAST'];
 
 export default function CalendarApp() {
   // --- 状態管理 ---
@@ -38,17 +37,14 @@ export default function CalendarApp() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [eventMap, setEventMap] = useState<EventMap>({});
   
-  // 画像設定
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [logoImage, setLogoImage] = useState<string | null>('/logo.png'); 
   const [isLogoWhite, setIsLogoWhite] = useState(false);
   
-  // レイアウト調整
   const [bgZoom, setBgZoom] = useState(100);
   const [bgX, setBgX] = useState(50);
   const [bgY, setBgY] = useState(50);
   const [headerGap, setHeaderGap] = useState(20);
-  const [previewScale, setPreviewScale] = useState(1);
 
   const [registeredCasts, setRegisteredCasts] = useState<string[]>(['キャストA', 'キャストB', 'キャストC']);
   
@@ -57,21 +53,24 @@ export default function CalendarApp() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  
-  // 入力フォーム状態
   const [inputName, setInputName] = useState('');
   const [inputType, setInputType] = useState<ShiftType>('早');
+  
+  // モーダル用
   const [isEventInput, setIsEventInput] = useState(false);
   const [eventTitleInput, setEventTitleInput] = useState('');
   const [isBDInput, setIsBDInput] = useState(false);
-  
-  // 【追加】時間選択用ステート
   const [timeStart, setTimeStart] = useState('21');
   const [timeEnd, setTimeEnd] = useState('LAST');
 
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  
+  // --- 新・保存システム用ステート ---
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null); // 生成された画像URL
+  const [isPreviewMode, setIsPreviewMode] = useState(false); // スクショ手動モード
+
+  const [previewScale, setPreviewScale] = useState(1);
 
   const calendarRef = useRef<HTMLDivElement>(null);
   const calendarWrapperRef = useRef<HTMLDivElement>(null);
@@ -109,7 +108,7 @@ export default function CalendarApp() {
   // --- データ読み込み ---
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v5'); // version up
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v6'); // version up
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -153,7 +152,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v5', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v6', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -182,7 +181,6 @@ export default function CalendarApp() {
         castName: inputName,
         type: inputType,
         isBD: isBDInput,
-        // その他が選択されている場合のみ時間を保存
         timeRange: inputType === 'その他' ? `${timeStart}-${timeEnd}` : undefined
       };
       setShifts([...shifts, newShift]);
@@ -197,7 +195,6 @@ export default function CalendarApp() {
     
     setInputName('');
     setIsBDInput(false);
-    // 時間リセット
     setTimeStart('21');
     setTimeEnd('LAST');
     setIsModalOpen(false);
@@ -217,7 +214,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v5');
+      localStorage.removeItem('girlsbar_calendar_data_v6');
       window.location.reload();
     }
   };
@@ -233,74 +230,47 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 画像保存ロジック（最終調整版） ---
-  const downloadImage = async () => {
-    if (!calendarRef.current || isSaving) return;
-    setIsSaving(true);
+  // --- 「長押し保存」用の画像生成ロジック ---
+  const generateImageForLongPress = async () => {
+    if (!calendarRef.current || isGenerating) return;
+    setIsGenerating(true);
     
-    const processSave = async (scale: number) => {
-      calendarRef.current!.classList.add('saving-mode');
-      
-      try {
-        const canvas = await html2canvas(calendarRef.current!, {
-          scale: scale,
-          width: 1080, // 強制的に幅を指定
-          height: calendarRef.current!.offsetHeight, // 高さを明示
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: null,
-          logging: false,
-          // 画像レンダリングの負荷を下げる設定
-          imageTimeout: 0,
-          onclone: (doc) => {
-             const el = doc.querySelector('.saving-target') as HTMLElement;
-             if(el) {
-                 el.style.transform = 'none';
-                 el.style.boxShadow = 'none';
-             }
-          }
-        });
-        
-        calendarRef.current!.classList.remove('saving-mode');
-
-        return new Promise<void>((resolve, reject) => {
-          // toBlobで品質を落として出力
-          canvas.toBlob((blob) => {
-            if (!blob) { reject('Blob作成失敗'); return; }
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`; // 短いファイル名に変更
-            link.href = url;
-            link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-            resolve();
-          }, 'image/jpeg', 0.8); // JPEG 0.8で出力
-        });
-
-      } catch (err) {
-        calendarRef.current!.classList.remove('saving-mode');
-        throw err;
-      }
-    };
+    // スクロール位置をリセット（ズレ防止）
+    window.scrollTo(0, 0);
 
     try {
-      // 1.0倍で試行
-      await processSave(1.0);
-    } catch (err) {
-      console.warn('Retry with lower scale...', err);
-      try {
-        // 失敗時 0.8倍
-        await processSave(0.8);
-        alert('メモリ不足のため画質を調整して保存しました。');
-      } catch (finalErr) {
-        console.error('Save failed', finalErr);
-        // 保存失敗時はプレビューモードへ誘導
-        if(confirm('保存に失敗しました（メモリ不足）。\nスクリーンショットモードを開きますか？\n（画面をスクショして保存してください）')) {
-            setIsPreviewMode(true);
+      // 一時的にスタイル調整
+      calendarRef.current.classList.add('saving-mode');
+
+      const canvas = await html2canvas(calendarRef.current, {
+        scale: 1, // 等倍（安定重視）
+        width: 1080,
+        height: calendarRef.current.offsetHeight,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        logging: false,
+        onclone: (doc) => {
+           const el = doc.querySelector('.saving-target') as HTMLElement;
+           if(el) {
+               el.style.transform = 'none';
+               el.style.boxShadow = 'none';
+           }
         }
-      }
+      });
+      
+      calendarRef.current.classList.remove('saving-mode');
+
+      // データURLとして取得し、ステートにセット
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      setGeneratedImage(dataUrl);
+
+    } catch (err) {
+      console.error('Generate failed', err);
+      calendarRef.current?.classList.remove('saving-mode');
+      alert('画像生成に失敗しました。スクショモードを試してください。');
     } finally {
-      setIsSaving(false);
+      setIsGenerating(false);
     }
   };
 
@@ -311,7 +281,6 @@ export default function CalendarApp() {
     setIsEventInput(!!title);
     setEventTitleInput(title || '');
     setIsBDInput(false);
-    // その他時間もリセット
     setTimeStart('21');
     setTimeEnd('LAST');
     setIsModalOpen(true);
@@ -340,6 +309,25 @@ export default function CalendarApp() {
         }
       `}</style>
 
+      {/* --- 画像生成後の「長押し保存」画面 (モーダル) --- */}
+      {generatedImage && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="text-white text-center mb-4 font-bold text-lg animate-pulse">
+            画像を長押しして「写真に保存」してください
+          </div>
+          <div className="relative w-full max-w-sm overflow-hidden rounded-lg shadow-2xl ring-2 ring-white/20">
+             <img src={generatedImage} alt="Generated Calendar" className="w-full h-auto object-contain" />
+          </div>
+          <button 
+            onClick={() => setGeneratedImage(null)}
+            className="mt-6 bg-white text-black px-8 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-gray-200 transition-colors"
+          >
+            <Check size={20} /> 閉じる
+          </button>
+        </div>
+      )}
+
+      {/* エラー表示 */}
       {!isPreviewMode && saveError && (
         <div className="bg-red-500 text-white p-2 text-center text-sm font-bold flex items-center justify-center gap-2">
           <AlertCircle size={16} /> {saveError}
@@ -381,11 +369,11 @@ export default function CalendarApp() {
                 </button>
 
                 <button 
-                  onClick={downloadImage} 
-                  disabled={isSaving}
-                  className={`flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm ${isSaving ? 'opacity-50' : ''}`}
+                  onClick={generateImageForLongPress} 
+                  disabled={isGenerating}
+                  className={`flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm ${isGenerating ? 'opacity-50' : ''}`}
                 >
-                  <Download size={18} /> {isSaving ? '...' : '保存'}
+                  <Download size={18} /> {isGenerating ? '生成中...' : '画像作成'}
                 </button>
               </div>
             </div>
@@ -444,7 +432,8 @@ export default function CalendarApp() {
                     <div className="flex items-center gap-2">
                        <MoveVertical size={14} className="text-gray-600"/>
                        <span className="text-xs font-bold w-20">隙間</span>
-                       <input type="range" min="0" max="500" step="10" value={headerGap} onChange={(e) => setHeaderGap(Number(e.target.value))} className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
+                       {/* 【修正】最大値1000px */}
+                       <input type="range" min="0" max="1000" step="10" value={headerGap} onChange={(e) => setHeaderGap(Number(e.target.value))} className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
                     </div>
                   </div>
 
@@ -458,14 +447,14 @@ export default function CalendarApp() {
         </div>
       )}
 
-      {/* --- スクショモード閉じるボタン（【修正】下に移動） --- */}
+      {/* --- スクショモード閉じるボタン（画面下部・中央） --- */}
       {isPreviewMode && (
-        <div className="fixed bottom-8 left-0 right-0 z-50 flex justify-center no-print">
+        <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 flex justify-center no-print w-full">
           <button 
             onClick={() => setIsPreviewMode(false)}
-            className="bg-gray-900/80 backdrop-blur text-white px-6 py-3 rounded-full font-bold shadow-2xl text-sm border border-gray-600 flex items-center gap-2"
+            className="bg-gray-900/90 backdrop-blur text-white px-8 py-3 rounded-full font-bold shadow-2xl text-base border border-gray-500 flex items-center gap-2 hover:bg-black transition-all"
           >
-            <X size={18} /> 閉じる
+            <X size={20} /> 編集に戻る
           </button>
         </div>
       )}
@@ -505,6 +494,7 @@ export default function CalendarApp() {
                   </div>
                 </div>
 
+                {/* スライダーで調整する隙間 */}
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
                 <h1 className="text-4xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900 relative z-20">
@@ -564,9 +554,7 @@ export default function CalendarApp() {
                                     {SHIFT_STYLES[shift.type].label}
                                   </span>
                                   
-                                  {/* 【修正】時間表示（その他の場合） */}
                                   <div className={`bg-gray-900 text-white font-bold px-1 py-1 flex-1 flex flex-col justify-center items-center text-center leading-none border-l border-white/20 rounded-r border-y border-r border-black/10 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
-                                    {/* 時間がある場合は表示 */}
                                     {shift.timeRange && <span className="text-[10px] opacity-90 mb-0.5 font-mono">{shift.timeRange}</span>}
                                     
                                     <span className="flex items-center gap-1 truncate w-full justify-center">
