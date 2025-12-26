@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save } from 'lucide-react';
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 // --- 型定義 ---
@@ -12,17 +12,22 @@ type Shift = {
   castName: string;
   type: ShiftType;
   isBD?: boolean;
+  // 【追加】時間指定用
+  timeRange?: string; 
 };
 
 type EventMap = { [key: number]: string };
 
-// --- 設定: シフトの見た目 ---
 const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string }> = {
   '早': { bg: 'bg-[#FF0055]', text: 'text-white', label: '早' },
   '遅': { bg: 'bg-[#008080]', text: 'text-white', label: '遅' },
   'OL': { bg: 'bg-blue-600', text: 'text-white', label: 'OL' },
   'その他': { bg: 'bg-orange-500', text: 'text-white', label: '他' },
 };
+
+// 時間リスト生成
+const HOURS_START = ['18', '19', '20', '21', '22', '23', '24', '1', '2', '3'];
+const HOURS_END = ['22', '23', '24', '1', '2', '3', '4', '5', '6', 'LAST'];
 
 export default function CalendarApp() {
   // --- 状態管理 ---
@@ -31,21 +36,19 @@ export default function CalendarApp() {
   const [month, setMonth] = useState(1);
   const [isSecondHalf, setIsSecondHalf] = useState(true);
   const [shifts, setShifts] = useState<Shift[]>([]);
-  
-  // イベント管理
   const [eventMap, setEventMap] = useState<EventMap>({});
   
   // 画像設定
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [logoImage, setLogoImage] = useState<string | null>('/logo.png'); 
-  // 【追加】ロゴの色反転フラグ
   const [isLogoWhite, setIsLogoWhite] = useState(false);
   
-  // 背景・レイアウト調整
+  // レイアウト調整
   const [bgZoom, setBgZoom] = useState(100);
   const [bgX, setBgX] = useState(50);
   const [bgY, setBgY] = useState(50);
   const [headerGap, setHeaderGap] = useState(20);
+  const [previewScale, setPreviewScale] = useState(1);
 
   const [registeredCasts, setRegisteredCasts] = useState<string[]>(['キャストA', 'キャストB', 'キャストC']);
   
@@ -54,27 +57,28 @@ export default function CalendarApp() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  
+  // 入力フォーム状態
   const [inputName, setInputName] = useState('');
   const [inputType, setInputType] = useState<ShiftType>('早');
-  
-  // モーダル用
   const [isEventInput, setIsEventInput] = useState(false);
   const [eventTitleInput, setEventTitleInput] = useState('');
   const [isBDInput, setIsBDInput] = useState(false);
+  
+  // 【追加】時間選択用ステート
+  const [timeStart, setTimeStart] = useState('21');
+  const [timeEnd, setTimeEnd] = useState('LAST');
+
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  // スクリーンショットモード（UI非表示）
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-
-  const [previewScale, setPreviewScale] = useState(1);
 
   const calendarRef = useRef<HTMLDivElement>(null);
   const calendarWrapperRef = useRef<HTMLDivElement>(null);
   const fileInputRefBg = useRef<HTMLInputElement>(null);
   const fileInputRefLogo = useRef<HTMLInputElement>(null);
 
-  // --- 画像圧縮用 ---
+  // --- 画像圧縮 ---
   const compressImage = (file: File, maxWidth: number = 1024): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -105,7 +109,7 @@ export default function CalendarApp() {
   // --- データ読み込み ---
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v4'); // バージョンアップ
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v5'); // version up
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -122,12 +126,12 @@ export default function CalendarApp() {
         if (parsed.isLogoWhite !== undefined) setIsLogoWhite(parsed.isLogoWhite);
       }
     } catch (e) {
-      console.error("読み込みエラー", e);
+      console.error("Load error", e);
     }
     setIsLoaded(true);
   }, []);
 
-  // --- 画面サイズに合わせて縮小率を計算 ---
+  // --- レスポンシブ計算 ---
   useEffect(() => {
     const handleResize = () => {
       if (calendarWrapperRef.current) {
@@ -141,7 +145,7 @@ export default function CalendarApp() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // --- データ保存 ---
+  // --- 保存 ---
   useEffect(() => {
     if (!isLoaded) return;
     const dataToSave = {
@@ -149,7 +153,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v4', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v5', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -178,6 +182,8 @@ export default function CalendarApp() {
         castName: inputName,
         type: inputType,
         isBD: isBDInput,
+        // その他が選択されている場合のみ時間を保存
+        timeRange: inputType === 'その他' ? `${timeStart}-${timeEnd}` : undefined
       };
       setShifts([...shifts, newShift]);
     }
@@ -188,8 +194,12 @@ export default function CalendarApp() {
       delete newEventMap[selectedDay];
     }
     setEventMap(newEventMap);
+    
     setInputName('');
     setIsBDInput(false);
+    // 時間リセット
+    setTimeStart('21');
+    setTimeEnd('LAST');
     setIsModalOpen(false);
   };
 
@@ -207,7 +217,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v4');
+      localStorage.removeItem('girlsbar_calendar_data_v5');
       window.location.reload();
     }
   };
@@ -223,31 +233,30 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 画像保存ロジック（超軽量化版） ---
+  // --- 画像保存ロジック（最終調整版） ---
   const downloadImage = async () => {
     if (!calendarRef.current || isSaving) return;
     setIsSaving(true);
     
-    // 保存処理
     const processSave = async (scale: number) => {
-      // 1. 一時的に重いCSS（影など）を削除するためのクラスを付与
       calendarRef.current!.classList.add('saving-mode');
       
       try {
         const canvas = await html2canvas(calendarRef.current!, {
           scale: scale,
+          width: 1080, // 強制的に幅を指定
+          height: calendarRef.current!.offsetHeight, // 高さを明示
           useCORS: true,
           allowTaint: true,
           backgroundColor: null,
           logging: false,
-          scrollX: 0,
-          scrollY: 0,
-          // 以下の設定で余計な描画を省く
-          onclone: (clonedDoc) => {
-             const el = clonedDoc.querySelector('.saving-target') as HTMLElement;
+          // 画像レンダリングの負荷を下げる設定
+          imageTimeout: 0,
+          onclone: (doc) => {
+             const el = doc.querySelector('.saving-target') as HTMLElement;
              if(el) {
-                 el.style.transform = 'none'; // 変形リセット
-                 el.style.boxShadow = 'none'; // 影削除
+                 el.style.transform = 'none';
+                 el.style.boxShadow = 'none';
              }
           }
         });
@@ -255,16 +264,17 @@ export default function CalendarApp() {
         calendarRef.current!.classList.remove('saving-mode');
 
         return new Promise<void>((resolve, reject) => {
+          // toBlobで品質を落として出力
           canvas.toBlob((blob) => {
             if (!blob) { reject('Blob作成失敗'); return; }
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.download = `${year}年${month}月${isSecondHalf ? '後半' : '前半'}シフト.png`;
+            link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`; // 短いファイル名に変更
             link.href = url;
             link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 500);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
             resolve();
-          }, 'image/jpeg', 0.85); // PNGではなくJPEG(0.85)にすることでさらにメモリ節約
+          }, 'image/jpeg', 0.8); // JPEG 0.8で出力
         });
 
       } catch (err) {
@@ -274,17 +284,20 @@ export default function CalendarApp() {
     };
 
     try {
-      // まず等倍(1.0)でトライ。これならメモリも食わないはず
+      // 1.0倍で試行
       await processSave(1.0);
     } catch (err) {
-      console.warn('First attempt failed, retrying low quality...', err);
+      console.warn('Retry with lower scale...', err);
       try {
-        // 失敗したら低画質(0.7)でリトライ
-        await processSave(0.7);
-        alert('メモリ不足のため、画質を調整して保存しました。');
+        // 失敗時 0.8倍
+        await processSave(0.8);
+        alert('メモリ不足のため画質を調整して保存しました。');
       } catch (finalErr) {
         console.error('Save failed', finalErr);
-        alert('保存できませんでした。\n「プレビューモード」ボタンを押して、スクリーンショットを撮る方法をお試しください。');
+        // 保存失敗時はプレビューモードへ誘導
+        if(confirm('保存に失敗しました（メモリ不足）。\nスクリーンショットモードを開きますか？\n（画面をスクショして保存してください）')) {
+            setIsPreviewMode(true);
+        }
       }
     } finally {
       setIsSaving(false);
@@ -298,6 +311,9 @@ export default function CalendarApp() {
     setIsEventInput(!!title);
     setEventTitleInput(title || '');
     setIsBDInput(false);
+    // その他時間もリセット
+    setTimeStart('21');
+    setTimeEnd('LAST');
     setIsModalOpen(true);
   };
 
@@ -312,9 +328,9 @@ export default function CalendarApp() {
       <style jsx global>{`
         .saving-mode .no-print { display: none !important; }
         .saving-mode { 
-           /* 保存時は余計な装飾をカットしてメモリ節約 */
            box-shadow: none !important; 
            backdrop-filter: none !important;
+           border-radius: 0 !important;
         }
         .scale-container {
           width: 100%;
@@ -324,7 +340,6 @@ export default function CalendarApp() {
         }
       `}</style>
 
-      {/* エラー表示 */}
       {!isPreviewMode && saveError && (
         <div className="bg-red-500 text-white p-2 text-center text-sm font-bold flex items-center justify-center gap-2">
           <AlertCircle size={16} /> {saveError}
@@ -332,7 +347,7 @@ export default function CalendarApp() {
         </div>
       )}
 
-      {/* --- 操作パネル (プレビューモード時は非表示) --- */}
+      {/* --- 操作パネル --- */}
       {!isPreviewMode && (
         <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-sm mb-4">
           <div className="max-w-4xl mx-auto flex flex-col gap-3">
@@ -340,20 +355,12 @@ export default function CalendarApp() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 border border-gray-300 px-2 py-1 rounded bg-white shadow-sm">
-                   <select 
-                     value={year} 
-                     onChange={(e) => setYear(Number(e.target.value))} 
-                     className="bg-transparent font-bold text-lg outline-none appearance-none pr-1"
-                   >
+                   <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
                      {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
                    </select>
                    <span className="text-xs font-bold text-gray-500">年</span>
                    <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                   <select 
-                     value={month} 
-                     onChange={(e) => setMonth(Number(e.target.value))} 
-                     className="bg-transparent font-bold text-lg outline-none appearance-none pr-1"
-                   >
+                   <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
                      {monthsList.map(m => <option key={m} value={m}>{m}</option>)}
                    </select>
                    <span className="text-xs font-bold text-gray-500">月</span>
@@ -369,9 +376,8 @@ export default function CalendarApp() {
                   <Settings size={20} />
                 </button>
                 
-                {/* プレビューモード切り替えボタン */}
                 <button onClick={() => setIsPreviewMode(true)} className="p-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 flex items-center gap-1 text-xs font-bold">
-                  <Eye size={18} /> <span className="hidden sm:inline">スクショ用</span>
+                  <Eye size={18} /> <span className="hidden sm:inline">スクショ</span>
                 </button>
 
                 <button 
@@ -397,15 +403,11 @@ export default function CalendarApp() {
                 </div>
                 <div className="p-3 bg-gray-50 rounded border space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ画像</label>
+                    <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ</label>
                     <div className="flex gap-2 items-center">
-                      {/* 【追加】白黒反転スイッチ */}
-                      <button 
-                         onClick={() => setIsLogoWhite(!isLogoWhite)}
-                         className={`flex items-center gap-1 px-2 py-1 rounded text-xs border font-bold ${isLogoWhite ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-800 border-gray-300'}`}
-                      >
+                      <button onClick={() => setIsLogoWhite(!isLogoWhite)} className={`flex items-center gap-1 px-2 py-1 rounded text-xs border font-bold ${isLogoWhite ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-800 border-gray-300'}`}>
                          {isLogoWhite ? <ToggleRight size={16}/> : <ToggleLeft size={16}/>}
-                         {isLogoWhite ? '白ロゴ' : '黒ロゴ'}
+                         {isLogoWhite ? '白' : '黒'}
                       </button>
                       <button onClick={() => fileInputRefLogo.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">変更</button>
                       <input type="file" accept="image/*" ref={fileInputRefLogo} onChange={(e) => handleImageUpload(e, setLogoImage)} className="hidden" />
@@ -413,7 +415,7 @@ export default function CalendarApp() {
                   </div>
                   <div className="border-t pt-2">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> 背景画像</label>
+                      <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> 背景</label>
                       <div className="flex gap-2">
                           {backgroundImage && <button onClick={() => setBackgroundImage(null)} className="text-xs text-red-500 underline">削除</button>}
                           <button onClick={() => fileInputRefBg.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">選択</button>
@@ -427,33 +429,27 @@ export default function CalendarApp() {
                            <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
-                           <span className="text-xs font-bold w-12 text-right">横位置</span>
+                           <span className="text-xs font-bold w-12 text-right">横</span>
                            <input type="range" min="0" max="100" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
-                           <span className="text-xs font-bold w-12 text-right">縦位置</span>
+                           <span className="text-xs font-bold w-12 text-right">縦</span>
                            <input type="range" min="0" max="100" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* 【追加】余白調整スライダー */}
                   <div className="border-t pt-2">
                     <div className="flex items-center gap-2">
                        <MoveVertical size={14} className="text-gray-600"/>
-                       <span className="text-xs font-bold w-20">隙間サイズ</span>
-                       <input 
-                         type="range" min="0" max="500" step="10" // 【修正】最大値を500に増加
-                         value={headerGap} 
-                         onChange={(e) => setHeaderGap(Number(e.target.value))} 
-                         className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" 
-                       />
+                       <span className="text-xs font-bold w-20">隙間</span>
+                       <input type="range" min="0" max="500" step="10" value={headerGap} onChange={(e) => setHeaderGap(Number(e.target.value))} className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
                     </div>
                   </div>
 
                   <div className="pt-2 border-t mt-2">
-                     <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> 全データリセット</button>
+                     <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> リセット</button>
                   </div>
                 </div>
               </div>
@@ -462,14 +458,16 @@ export default function CalendarApp() {
         </div>
       )}
 
-      {/* --- プレビューモード終了ボタン (オーバーレイ) --- */}
+      {/* --- スクショモード閉じるボタン（【修正】下に移動） --- */}
       {isPreviewMode && (
-        <button 
-          onClick={() => setIsPreviewMode(false)}
-          className="fixed top-4 right-4 z-50 bg-white/90 text-black px-4 py-2 rounded-full font-bold shadow-lg text-sm border-2 border-black"
-        >
-          ✕ 閉じる
-        </button>
+        <div className="fixed bottom-8 left-0 right-0 z-50 flex justify-center no-print">
+          <button 
+            onClick={() => setIsPreviewMode(false)}
+            className="bg-gray-900/80 backdrop-blur text-white px-6 py-3 rounded-full font-bold shadow-2xl text-sm border border-gray-600 flex items-center gap-2"
+          >
+            <X size={18} /> 閉じる
+          </button>
+        </div>
       )}
 
       {/* --- カレンダー描画エリア --- */}
@@ -480,7 +478,7 @@ export default function CalendarApp() {
              transformOrigin: 'top center',
              width: '1080px',
              height: 'auto',
-             marginBottom: isPreviewMode ? '0' : `-${(1080 * (1 - previewScale))}px`
+             marginBottom: isPreviewMode ? '100px' : `-${(1080 * (1 - previewScale))}px`
            }}
            className="saving-target"
         >
@@ -495,27 +493,18 @@ export default function CalendarApp() {
           >
             
             <div className="relative z-10 pt-4 pb-6 px-8">
-              {/* ヘッダー・ロゴ */}
               <div className="text-center">
-                
                 <div className="flex justify-center mb-0">
                   <div className="w-full h-[280px] relative flex items-center justify-center"> 
                     <img 
                       src={logoImage || '/logo.png'} 
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
                       alt="店舗ロゴ" 
-                      // 【追加】白黒反転フィルター適用
                       className={`w-full h-full object-contain drop-shadow-xl transition-all ${isLogoWhite ? 'brightness-0 invert' : ''}`} 
                     />
-                    {!logoImage && (
-                        <div className="absolute inset-0 bg-gray-100/50 rounded-lg border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-500 font-bold backdrop-blur-sm -z-10">
-                        No Logo
-                        </div>
-                    )}
                   </div>
                 </div>
 
-                {/* 【追加】このスペーサーでロゴとタイトルの距離を調整 */}
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
                 <h1 className="text-4xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900 relative z-20">
@@ -574,14 +563,19 @@ export default function CalendarApp() {
                                   <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-8 font-bold flex items-center justify-center text-xs rounded-l border-y border-l border-black/10`}>
                                     {SHIFT_STYLES[shift.type].label}
                                   </span>
-                                  <span className={`bg-gray-900 text-white font-bold px-2 py-1 flex-1 text-center truncate border-l border-white/20 rounded-r border-y border-r border-black/10 flex items-center justify-center gap-1 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
-                                    {shift.isBD && <Cake size={14} className="text-yellow-400 fill-yellow-400 animate-pulse"/>}
-                                    {shift.castName}
-                                  </span>
-                                  <button 
-                                    onClick={(e) => deleteShift(shift.id, e)}
-                                    className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover/chip:opacity-100 transition-opacity no-print z-20 shadow-lg"
-                                  >
+                                  
+                                  {/* 【修正】時間表示（その他の場合） */}
+                                  <div className={`bg-gray-900 text-white font-bold px-1 py-1 flex-1 flex flex-col justify-center items-center text-center leading-none border-l border-white/20 rounded-r border-y border-r border-black/10 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
+                                    {/* 時間がある場合は表示 */}
+                                    {shift.timeRange && <span className="text-[10px] opacity-90 mb-0.5 font-mono">{shift.timeRange}</span>}
+                                    
+                                    <span className="flex items-center gap-1 truncate w-full justify-center">
+                                      {shift.isBD && <Cake size={10} className="text-yellow-400 fill-yellow-400 shrink-0"/>}
+                                      <span className="truncate">{shift.castName}</span>
+                                    </span>
+                                  </div>
+                                  
+                                  <button onClick={(e) => deleteShift(shift.id, e)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover/chip:opacity-100 transition-opacity no-print z-20 shadow-lg">
                                     <Trash2 size={10} />
                                   </button>
                                 </div>
@@ -609,12 +603,6 @@ export default function CalendarApp() {
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setIsModalOpen(false)}>
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-2xl flex items-center gap-2 text-gray-800">
-                <span className="bg-gray-100 w-10 h-10 flex items-center justify-center rounded-full">{selectedDay}</span>
-                <span className="text-base">日の設定</span>
-              </h3>
-            </div>
             
             <div className={`mb-4 p-3 rounded-xl border transition-all ${isEventInput ? 'bg-yellow-50 border-yellow-300 shadow-sm' : 'bg-gray-50 border-transparent'}`}>
               <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700 mb-2">
@@ -622,45 +610,21 @@ export default function CalendarApp() {
                 <Star size={20} className={isEventInput ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400'}/>
                 <span>イベント日設定</span>
               </label>
-              
               {isEventInput && (
-                <input 
-                  type="text" 
-                  value={eventTitleInput}
-                  onChange={(e) => setEventTitleInput(e.target.value)}
-                  placeholder="イベント名 (例: 生誕祭)"
-                  className="w-full border border-yellow-300 p-2 rounded bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm font-bold"
-                />
+                <input type="text" value={eventTitleInput} onChange={(e) => setEventTitleInput(e.target.value)} placeholder="イベント名" className="w-full border border-yellow-300 p-2 rounded bg-white font-bold" />
               )}
-            </div>
-            
-            <hr className="my-4 border-gray-100"/>
-
-            <div className="mb-4 bg-pink-50 p-3 rounded-xl border border-pink-100">
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700 justify-center">
-                <input type="checkbox" checked={isBDInput} onChange={(e) => setIsBDInput(e.target.checked)} className="w-5 h-5 accent-pink-500 rounded" />
-                <Cake size={20} className={isBDInput ? 'text-pink-500 fill-pink-200' : 'text-gray-400'}/>
-                <span className={isBDInput ? 'text-pink-600' : ''}>🎂 バースデーキャスト</span>
-              </label>
             </div>
 
             <div className="mb-4">
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cast Name</label>
-              <input 
-                list="cast-options"
-                type="text" 
-                value={inputName}
-                onChange={(e) => setInputName(e.target.value)}
-                className="w-full bg-gray-50 border-2 border-gray-200 p-3 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-lg font-bold transition-all"
-                placeholder="名前を選択 / 入力"
-              />
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cast</label>
+              <input list="cast-options" type="text" value={inputName} onChange={(e) => setInputName(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 p-3 rounded-xl font-bold text-lg" placeholder="名前" />
               <datalist id="cast-options">
                 {registeredCasts.map((name, i) => <option key={i} value={name} />)}
               </datalist>
             </div>
 
-            <div className="mb-6">
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Shift Type</label>
+            <div className="mb-2">
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Type</label>
               <div className="grid grid-cols-4 gap-2">
                 {(Object.keys(SHIFT_STYLES) as ShiftType[]).map((type) => (
                   <button
@@ -678,12 +642,34 @@ export default function CalendarApp() {
               </div>
             </div>
 
-            <button 
-              onClick={addShift}
-              className="w-full py-4 bg-gray-900 text-white font-bold rounded-xl shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2"
-            >
-              <Save size={18} />
-              保存して閉じる
+            {/* 【追加】「その他」選択時のみ表示される時間設定 */}
+            {inputType === 'その他' && (
+              <div className="mb-4 bg-orange-50 p-3 rounded-xl border border-orange-200 animate-in slide-in-from-top-1">
+                <label className="flex items-center gap-2 text-xs font-bold text-orange-700 mb-2">
+                  <Clock size={14}/> 時間指定
+                </label>
+                <div className="flex items-center gap-2">
+                  <select value={timeStart} onChange={(e) => setTimeStart(e.target.value)} className="bg-white border border-orange-300 rounded p-1 font-bold flex-1 text-center">
+                    {HOURS_START.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                  <span className="font-bold text-orange-400">~</span>
+                  <select value={timeEnd} onChange={(e) => setTimeEnd(e.target.value)} className="bg-white border border-orange-300 rounded p-1 font-bold flex-1 text-center">
+                    {HOURS_END.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <div className="mb-6 mt-4 bg-pink-50 p-3 rounded-xl border border-pink-100">
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700 justify-center">
+                <input type="checkbox" checked={isBDInput} onChange={(e) => setIsBDInput(e.target.checked)} className="w-5 h-5 accent-pink-500 rounded" />
+                <Cake size={20} className={isBDInput ? 'text-pink-500 fill-pink-200' : 'text-gray-400'}/>
+                <span className={isBDInput ? 'text-pink-600' : ''}>バースデー</span>
+              </label>
+            </div>
+
+            <button onClick={addShift} className="w-full py-4 bg-gray-900 text-white font-bold rounded-xl shadow-lg hover:bg-black flex items-center justify-center gap-2">
+              <Save size={18} /> 決定
             </button>
           </div>
         </div>
