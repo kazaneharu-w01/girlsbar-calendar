@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share } from 'lucide-react';
-// toJpegを使用（データURLとして取得しやすくするため）
-import { toJpeg } from 'html-to-image';
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown } from 'lucide-react';
+import { toBlob, toJpeg } from 'html-to-image';
 
 // --- 型定義 ---
 type ShiftType = '早' | '遅' | 'OL' | 'その他';
@@ -17,6 +16,22 @@ type Shift = {
 };
 
 type EventMap = { [key: number]: string };
+
+// 保存データ全体の型
+type BackupData = {
+  shifts: Shift[];
+  eventMap: EventMap;
+  registeredCasts: string[];
+  year: number;
+  month: number;
+  backgroundImage: string | null;
+  logoImage: string | null;
+  bgZoom: number;
+  bgX: number;
+  bgY: number;
+  headerGap: number;
+  isLogoWhite: boolean;
+};
 
 const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string }> = {
   '早': { bg: 'bg-[#FF0055]', text: 'text-white', label: '早' },
@@ -45,7 +60,6 @@ export default function CalendarApp() {
   const [bgY, setBgY] = useState(50);
   const [headerGap, setHeaderGap] = useState(20);
 
-  // デフォルトキャスト
   const [registeredCasts, setRegisteredCasts] = useState<string[]>([
     'もねまろ', 'ころすけ', 'あんそにー', 'たろう', 'ななし',
     'てんか', 'かずと', 'よう', 'ゆえ', 'ひな', 'むつ'
@@ -66,18 +80,20 @@ export default function CalendarApp() {
 
   const [saveError, setSaveError] = useState<string | null>(null);
   
-  // 生成状態管理
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [showPreviewControls, setShowPreviewControls] = useState(true);
 
-  // 自動ズーム用スケール
   const [previewScale, setPreviewScale] = useState(1);
 
   const calendarRef = useRef<HTMLDivElement>(null);
   const calendarWrapperRef = useRef<HTMLDivElement>(null);
   const fileInputRefBg = useRef<HTMLInputElement>(null);
   const fileInputRefLogo = useRef<HTMLInputElement>(null);
+  const fileInputRefImport = useRef<HTMLInputElement>(null); // インポート用
 
+  // --- 画像圧縮 ---
   const compressImage = (file: File, maxWidth: number = 1024): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -107,7 +123,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v12'); // Version Up
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v13');
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -127,7 +143,6 @@ export default function CalendarApp() {
     setIsLoaded(true);
   }, []);
 
-  // 自動ズーム計算
   useEffect(() => {
     const handleResize = () => {
       const screenWidth = window.innerWidth;
@@ -147,7 +162,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v12', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v13', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -213,9 +228,57 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v12');
+      localStorage.removeItem('girlsbar_calendar_data_v13');
       window.location.reload();
     }
+  };
+
+  // --- インポート/エクスポート機能 ---
+  const exportData = () => {
+    const data: BackupData = {
+      shifts, eventMap, registeredCasts, backgroundImage, logoImage,
+      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
+    };
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `calendar_backup_${new Date().toISOString().slice(0,10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importData = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = event.target?.result as string;
+        const parsed: BackupData = JSON.parse(json);
+        // データ復元
+        if(parsed.shifts) setShifts(parsed.shifts);
+        if(parsed.eventMap) setEventMap(parsed.eventMap);
+        if(parsed.registeredCasts) setRegisteredCasts(parsed.registeredCasts);
+        if(parsed.backgroundImage) setBackgroundImage(parsed.backgroundImage);
+        if(parsed.logoImage) setLogoImage(parsed.logoImage);
+        if(parsed.bgZoom) setBgZoom(parsed.bgZoom);
+        if(parsed.bgX) setBgX(parsed.bgX);
+        if(parsed.bgY) setBgY(parsed.bgY);
+        if(parsed.headerGap) setHeaderGap(parsed.headerGap);
+        if(parsed.year) setYear(parsed.year);
+        if(parsed.month) setMonth(parsed.month);
+        if(parsed.isLogoWhite !== undefined) setIsLogoWhite(parsed.isLogoWhite);
+        
+        alert('データを読み込みました');
+        setIsSettingsOpen(false);
+      } catch (err) {
+        alert('ファイルの読み込みに失敗しました。データ形式が正しいか確認してください。');
+      }
+    };
+    reader.readAsText(file);
+    // 同じファイルを再度選択できるようにクリア
+    e.target.value = '';
   };
 
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>, setImage: (url: string | null) => void) => {
@@ -229,43 +292,84 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 画像生成ロジック (長押し保存用) ---
-  const handleGenerateImage = async () => {
+  // --- 【修正版】画像保存ロジック（ハイブリッド） ---
+  const handleSaveImage = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
-    
-    // スクロールをリセットして描画ズレ防止
     window.scrollTo(0, 0);
 
     try {
-      // 1. 画像データを生成 (DataURL)
-      const dataUrl = await toJpeg(calendarRef.current, {
+      // 1. まずBlobを生成（背景画像設定を焼き付け）
+      const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
-        width: 1080, // 強制的に1080px幅
-        height: calendarRef.current.scrollHeight,
-        pixelRatio: 1, // スマホのDPRを無視して等倍出力（メモリ節約）
-        backgroundColor: '#ffffff',
-        // 【修正点】背景画像の設定をここで「明示的に」焼き付ける
+        width: 1080, 
+        height: calendarRef.current.scrollHeight, 
         style: { 
             transform: 'none', 
             transformOrigin: 'top left',
             margin: '0',
             padding: '0',
-            // 背景画像をスタイルとして強制適用（バグ回避）
             backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
             backgroundSize: `${bgZoom}%`,
             backgroundPosition: `${bgX}% ${bgY}%`
         } 
       });
 
-      // 2. モーダルに表示
-      setGeneratedImage(dataUrl);
+      if (!blob) throw new Error('Blob generation failed');
+
+      // 2. Web Share APIで保存を試みる
+      const file = new File([blob], `shift_${year}_${month}.jpg`, { type: 'image/jpeg' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'シフト表',
+          text: `${year}年${month}月のシフト表`
+        });
+      } else {
+        // PC等の場合: ダウンロード
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`;
+        link.href = url;
+        link.click();
+      }
 
     } catch (err) {
-      console.error('Generation failed', err);
-      alert('画像の作成に失敗しました。メモリ不足の可能性があります。');
+      console.error('Save failed', err);
+      // シェアキャンセル以外のエラー（メモリ不足など）の場合、長押しモードへ移行
+      if ((err as Error).name !== 'AbortError') {
+        alert('自動保存に失敗しました。\n表示される画像を長押しして保存してください。');
+        fallbackToLongPress();
+      }
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // 救済用：長押し保存画像を生成して表示
+  const fallbackToLongPress = async () => {
+    if (!calendarRef.current) return;
+    try {
+        const dataUrl = await toJpeg(calendarRef.current, {
+            quality: 0.95,
+            width: 1080,
+            height: calendarRef.current.scrollHeight,
+            pixelRatio: 1,
+            backgroundColor: '#ffffff',
+            style: { 
+                transform: 'none', 
+                transformOrigin: 'top left',
+                margin: '0',
+                padding: '0',
+                backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
+                backgroundSize: `${bgZoom}%`,
+                backgroundPosition: `${bgX}% ${bgY}%`
+            } 
+        });
+        setGeneratedImage(dataUrl);
+    } catch(e) {
+        alert('画像の生成にも失敗しました。端末のメモリが不足しています。');
     }
   };
 
@@ -281,6 +385,16 @@ export default function CalendarApp() {
     setIsModalOpen(true);
   };
 
+  // 【追加】入力欄の自動フォーカスアウト制御
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputName(val);
+    // 入力された値が登録済みリストにある場合、キーボードを閉じる(blur)
+    if (registeredCasts.includes(val)) {
+        e.target.blur();
+    }
+  };
+
   const days = getDaysArray();
   const yearsList = Array.from({ length: 6 }, (_, i) => 2025 + i);
   const monthsList = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -288,9 +402,14 @@ export default function CalendarApp() {
   if (!isLoaded) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-100 font-sans text-gray-800 pb-20">
+    <div className={`min-h-screen bg-gray-100 font-sans text-gray-800 ${isPreviewMode ? 'bg-black' : 'pb-20'}`}>
       
-      {/* --- 生成後の画像表示モーダル (長押し保存用) --- */}
+      {/* プレビュー画面でのタップ判定 */}
+      {isPreviewMode && (
+        <div className="fixed inset-0 z-40" onClick={() => setShowPreviewControls(!showPreviewControls)}></div>
+      )}
+
+      {/* --- 生成後の画像表示モーダル (救済措置用) --- */}
       {generatedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="text-white text-center mb-4 font-bold text-lg animate-pulse">
@@ -308,7 +427,7 @@ export default function CalendarApp() {
         </div>
       )}
 
-      {saveError && (
+      {!isPreviewMode && saveError && (
         <div className="bg-red-500 text-white p-2 text-center text-sm font-bold flex items-center justify-center gap-2">
           <AlertCircle size={16} /> {saveError}
           <button onClick={resetAllData} className="underline ml-2 bg-white text-red-500 px-2 rounded">Reset</button>
@@ -316,127 +435,156 @@ export default function CalendarApp() {
       )}
 
       {/* --- 操作パネル --- */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-sm mb-4">
-        <div className="max-w-4xl mx-auto flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 border border-gray-300 px-2 py-1 rounded bg-white shadow-sm">
-                 <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
-                   {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
-                 </select>
-                 <span className="text-xs font-bold text-gray-500">年</span>
-                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                 <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
-                   {monthsList.map(m => <option key={m} value={m}>{m}</option>)}
-                 </select>
-                 <span className="text-xs font-bold text-gray-500">月</span>
-              </div>
-              <div className="flex bg-gray-100 rounded p-1 text-xs border border-gray-200">
-                <button onClick={() => setIsSecondHalf(false)} className={`px-3 py-1.5 rounded transition-all ${!isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>前半</button>
-                <button onClick={() => setIsSecondHalf(true)} className={`px-3 py-1.5 rounded transition-all ${isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>後半</button>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${isSettingsOpen ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}>
-                <Settings size={20} />
-              </button>
-              
-              {/* 保存ボタン: 画像生成を実行 */}
-              <button 
-                onClick={handleGenerateImage} 
-                disabled={isGenerating}
-                className={`flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm ${isGenerating ? 'opacity-50' : ''}`}
-              >
-                <Share size={18} /> {isGenerating ? '作成中...' : '画像を保存'}
-              </button>
-            </div>
-          </div>
-
-          {isSettingsOpen && (
-            <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm animate-in slide-in-from-top-2">
-              <div className="p-3 bg-gray-50 rounded border">
-                <label className="block font-bold mb-2 text-gray-600 flex items-center gap-1"><UserPlus size={14}/> キャスト登録</label>
-                <div className="flex gap-2 mb-3">
-                  <input type="text" value={newCastNameInput} onChange={(e) => setNewCastNameInput(e.target.value)} className="border p-2 rounded flex-1 outline-none" placeholder="名前" />
-                  <button onClick={addNewCast} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 font-bold text-xs whitespace-nowrap">追加</button>
+      {!isPreviewMode && (
+        <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-sm mb-4">
+          <div className="max-w-4xl mx-auto flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 border border-gray-300 px-2 py-1 rounded bg-white shadow-sm">
+                   <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
+                     {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
+                   </select>
+                   <span className="text-xs font-bold text-gray-500">年</span>
+                   <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                   <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
+                     {monthsList.map(m => <option key={m} value={m}>{m}</option>)}
+                   </select>
+                   <span className="text-xs font-bold text-gray-500">月</span>
                 </div>
+                <div className="flex bg-gray-100 rounded p-1 text-xs border border-gray-200">
+                  <button onClick={() => setIsSecondHalf(false)} className={`px-3 py-1.5 rounded transition-all ${!isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>前半</button>
+                  <button onClick={() => setIsSecondHalf(true)} className={`px-3 py-1.5 rounded transition-all ${isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>後半</button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${isSettingsOpen ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}>
+                  <Settings size={20} />
+                </button>
                 
-                <div className="border-t pt-2">
-                  <label className="block text-xs font-bold text-gray-500 mb-1">登録済み ({registeredCasts.length})</label>
-                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
-                    {registeredCasts.map(name => (
-                      <span key={name} className="bg-gray-100 border border-gray-200 px-2 py-1 rounded text-xs flex items-center gap-1 font-bold text-gray-700 group">
-                        {name}
-                        <button onClick={() => removeCast(name)} className="text-gray-400 hover:text-red-500 p-0.5 rounded-full hover:bg-gray-200"><X size={12}/></button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                <button onClick={() => { setIsPreviewMode(true); setShowPreviewControls(true); }} className="p-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 flex items-center gap-1 text-xs font-bold">
+                  <Eye size={18} /> <span className="hidden sm:inline">スクショ</span>
+                </button>
 
-              <div className="p-3 bg-gray-50 rounded border space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ</label>
-                  <div className="flex gap-2 items-center">
-                    <button onClick={() => setIsLogoWhite(!isLogoWhite)} className={`flex items-center gap-1 px-2 py-1 rounded text-xs border font-bold ${isLogoWhite ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-800 border-gray-300'}`}>
-                       {isLogoWhite ? <ToggleRight size={16}/> : <ToggleLeft size={16}/>}
-                       {isLogoWhite ? '白' : '黒'}
-                    </button>
-                    <button onClick={() => fileInputRefLogo.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">変更</button>
-                    <input type="file" accept="image/*" ref={fileInputRefLogo} onChange={(e) => handleImageUpload(e, setLogoImage)} className="hidden" />
-                  </div>
-                </div>
-                <div className="border-t pt-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> 背景</label>
-                    <div className="flex gap-2">
-                        {backgroundImage && <button onClick={() => setBackgroundImage(null)} className="text-xs text-red-500 underline">削除</button>}
-                        <button onClick={() => fileInputRefBg.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">選択</button>
-                        <input type="file" accept="image/*" ref={fileInputRefBg} onChange={(e) => handleImageUpload(e, setBackgroundImage)} className="hidden" />
-                    </div>
-                  </div>
-                  {backgroundImage && (
-                    <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
-                      <div className="flex items-center gap-2">
-                         <span className="text-xs font-bold w-12 text-right">Zoom</span>
-                         <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                         <span className="text-xs font-bold w-12 text-right">横</span>
-                         {/* 【修正】スライド幅を拡大 */}
-                         <input type="range" min="-100" max="200" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                         <span className="text-xs font-bold w-12 text-right">縦</span>
-                         {/* 【修正】スライド幅を拡大 */}
-                         <input type="range" min="-100" max="200" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t pt-2">
-                  <div className="flex items-center gap-2">
-                     <MoveVertical size={14} className="text-gray-600"/>
-                     <span className="text-xs font-bold w-20">隙間</span>
-                     {/* 【修正】スライド幅を600に縮小 */}
-                     <input type="range" min="0" max="600" step="10" value={headerGap} onChange={(e) => setHeaderGap(Number(e.target.value))} className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t mt-2">
-                   <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> リセット</button>
-                </div>
+                <button 
+                  onClick={handleSaveImage} 
+                  disabled={isGenerating}
+                  className={`flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm ${isGenerating ? 'opacity-50' : ''}`}
+                >
+                  <Share size={18} /> {isGenerating ? '処理中...' : '画像を保存'}
+                </button>
               </div>
             </div>
-          )}
+
+            {isSettingsOpen && (
+              <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm animate-in slide-in-from-top-2">
+                <div className="p-3 bg-gray-50 rounded border">
+                  {/* データ管理 */}
+                  <div className="flex items-center justify-between mb-4 border-b pb-2">
+                    <span className="font-bold text-gray-600">データ管理</span>
+                    <div className="flex gap-2">
+                      <button onClick={exportData} className="flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-200">
+                        <FileDown size={14}/> 書き出し
+                      </button>
+                      <label className="flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-200 cursor-pointer">
+                        <FileUp size={14}/> 読み込み
+                        <input type="file" accept=".json" onChange={importData} className="hidden" ref={fileInputRefImport} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <label className="block font-bold mb-2 text-gray-600 flex items-center gap-1"><UserPlus size={14}/> キャスト登録</label>
+                  <div className="flex gap-2 mb-3">
+                    <input type="text" value={newCastNameInput} onChange={(e) => setNewCastNameInput(e.target.value)} className="border p-2 rounded flex-1 outline-none" placeholder="名前" />
+                    <button onClick={addNewCast} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 font-bold text-xs whitespace-nowrap">追加</button>
+                  </div>
+                  
+                  <div className="border-t pt-2">
+                    <label className="block text-xs font-bold text-gray-500 mb-1">登録済み ({registeredCasts.length})</label>
+                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                      {registeredCasts.map(name => (
+                        <span key={name} className="bg-gray-100 border border-gray-200 px-2 py-1 rounded text-xs flex items-center gap-1 font-bold text-gray-700 group">
+                          {name}
+                          <button onClick={() => removeCast(name)} className="text-gray-400 hover:text-red-500 p-0.5 rounded-full hover:bg-gray-200"><X size={12}/></button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-gray-50 rounded border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ</label>
+                    <div className="flex gap-2 items-center">
+                      <button onClick={() => setIsLogoWhite(!isLogoWhite)} className={`flex items-center gap-1 px-2 py-1 rounded text-xs border font-bold ${isLogoWhite ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-800 border-gray-300'}`}>
+                         {isLogoWhite ? <ToggleRight size={16}/> : <ToggleLeft size={16}/>}
+                         {isLogoWhite ? '白' : '黒'}
+                      </button>
+                      <button onClick={() => fileInputRefLogo.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">変更</button>
+                      <input type="file" accept="image/*" ref={fileInputRefLogo} onChange={(e) => handleImageUpload(e, setLogoImage)} className="hidden" />
+                    </div>
+                  </div>
+                  <div className="border-t pt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> 背景</label>
+                      <div className="flex gap-2">
+                          {backgroundImage && <button onClick={() => setBackgroundImage(null)} className="text-xs text-red-500 underline">削除</button>}
+                          <button onClick={() => fileInputRefBg.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">選択</button>
+                          <input type="file" accept="image/*" ref={fileInputRefBg} onChange={(e) => handleImageUpload(e, setBackgroundImage)} className="hidden" />
+                      </div>
+                    </div>
+                    {backgroundImage && (
+                      <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
+                        <div className="flex items-center gap-2">
+                           <span className="text-xs font-bold w-12 text-right">Zoom</span>
+                           <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <span className="text-xs font-bold w-12 text-right">横</span>
+                           <input type="range" min="-100" max="200" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <span className="text-xs font-bold w-12 text-right">縦</span>
+                           <input type="range" min="-100" max="200" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t pt-2">
+                    <div className="flex items-center gap-2">
+                       <MoveVertical size={14} className="text-gray-600"/>
+                       <span className="text-xs font-bold w-20">隙間</span>
+                       <input type="range" min="0" max="600" step="10" value={headerGap} onChange={(e) => setHeaderGap(Number(e.target.value))} className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t mt-2">
+                     <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> 全リセット</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* --- スクショモード閉じるボタン --- */}
+      {isPreviewMode && showPreviewControls && (
+        <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center gap-2 no-print w-full pointer-events-none">
+          <div className="bg-black/50 text-white text-xs px-3 py-1 rounded-full mb-2">画面をタップしてボタンを隠す</div>
+          <button 
+            onClick={() => setIsPreviewMode(false)}
+            className="bg-gray-900/90 backdrop-blur text-white px-8 py-3 rounded-full font-bold shadow-2xl text-base border border-gray-500 flex items-center gap-2 hover:bg-black transition-all pointer-events-auto"
+          >
+            <X size={20} /> 編集に戻る
+          </button>
+        </div>
+      )}
 
       {/* --- カレンダー描画エリア --- */}
       <div 
-         className="scale-container"
+         className={`scale-container ${isPreviewMode ? 'items-center min-h-screen py-10' : ''}`} 
          ref={calendarWrapperRef}
          style={{ width: '100%', display: 'flex', justifyContent: 'center', overflow: 'hidden' }}
       >
@@ -446,7 +594,7 @@ export default function CalendarApp() {
              transformOrigin: 'top center',
              width: '1080px',
              height: 'auto',
-             marginBottom: `-${(1080 * (1 - previewScale))}px`
+             marginBottom: isPreviewMode ? '100px' : `-${(1080 * (1 - previewScale))}px`
            }}
         >
           <div 
@@ -580,7 +728,14 @@ export default function CalendarApp() {
 
             <div className="mb-4">
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cast</label>
-              <input list="cast-options" type="text" value={inputName} onChange={(e) => setInputName(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-200 p-3 rounded-xl font-bold text-lg" placeholder="名前" />
+              <input 
+                list="cast-options" 
+                type="text" 
+                value={inputName} 
+                onChange={handleInputChange} 
+                className="w-full bg-gray-50 border-2 border-gray-200 p-3 rounded-xl font-bold text-lg" 
+                placeholder="名前" 
+              />
               <datalist id="cast-options">
                 {registeredCasts.map((name, i) => <option key={i} value={name} />)}
               </datalist>
