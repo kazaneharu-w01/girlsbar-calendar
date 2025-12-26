@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera } from 'lucide-react';
+// 【修正】Star をインポートに追加しました
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera } from 'lucide-react';
 import { toBlob, toJpeg } from 'html-to-image';
 
 // --- 型定義 ---
@@ -299,7 +300,6 @@ export default function CalendarApp() {
         width: 1080, 
         height: calendarRef.current.scrollHeight,
         pixelRatio: 1, 
-        // 背景色を指定しない（DOMの白背景を生かす）
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
@@ -342,7 +342,6 @@ export default function CalendarApp() {
         width: 1080,
         height: calendarRef.current.scrollHeight,
         pixelRatio: 1,
-        // ここでも背景色指定を削除
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
       setGeneratedImage(dataUrl);
@@ -408,154 +407,139 @@ export default function CalendarApp() {
       )}
 
       {/* --- 操作パネル --- */}
-      {!isPreviewMode && (
-        <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-sm mb-4">
-          <div className="max-w-4xl mx-auto flex flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 border border-gray-300 px-2 py-1 rounded bg-white shadow-sm">
-                   <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
-                     {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
-                   </select>
-                   <span className="text-xs font-bold text-gray-500">年</span>
-                   <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                   <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
-                     {monthsList.map(m => <option key={m} value={m}>{m}</option>)}
-                   </select>
-                   <span className="text-xs font-bold text-gray-500">月</span>
-                </div>
-                <div className="flex bg-gray-100 rounded p-1 text-xs border border-gray-200">
-                  <button onClick={() => setIsSecondHalf(false)} className={`px-3 py-1.5 rounded transition-all ${!isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>前半</button>
-                  <button onClick={() => setIsSecondHalf(true)} className={`px-3 py-1.5 rounded transition-all ${isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>後半</button>
-                </div>
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-sm mb-4">
+        <div className="max-w-4xl mx-auto flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 border border-gray-300 px-2 py-1 rounded bg-white shadow-sm">
+                 <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
+                   {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
+                 </select>
+                 <span className="text-xs font-bold text-gray-500">年</span>
+                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                 <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="bg-transparent font-bold text-lg outline-none appearance-none pr-1">
+                   {monthsList.map(m => <option key={m} value={m}>{m}</option>)}
+                 </select>
+                 <span className="text-xs font-bold text-gray-500">月</span>
               </div>
-
-              <div className="flex gap-2">
-                <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${isSettingsOpen ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}>
-                  <Settings size={20} />
-                </button>
-                
-                {/* 長押し保存ボタン (手動生成) */}
-                <button onClick={handleManualSave} disabled={isGenerating} className="p-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 flex items-center gap-1 text-xs font-bold whitespace-nowrap">
-                  <Smartphone size={18} /> <span className="hidden sm:inline">長押し保存</span>
-                </button>
-
-                {/* 自動保存ボタン (シェア) */}
-                <button 
-                  onClick={handleAutoSave} 
-                  disabled={isGenerating}
-                  className={`flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm ${isGenerating ? 'opacity-50' : ''}`}
-                >
-                  <Share size={18} /> {isGenerating ? '...' : '画像を保存'}
-                </button>
+              <div className="flex bg-gray-100 rounded p-1 text-xs border border-gray-200">
+                <button onClick={() => setIsSecondHalf(false)} className={`px-3 py-1.5 rounded transition-all ${!isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>前半</button>
+                <button onClick={() => setIsSecondHalf(true)} className={`px-3 py-1.5 rounded transition-all ${isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>後半</button>
               </div>
             </div>
 
-            {isSettingsOpen && (
-              <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm animate-in slide-in-from-top-2">
-                <div className="p-3 bg-gray-50 rounded border">
-                  {/* データ管理 */}
-                  <div className="flex items-center justify-between mb-4 border-b pb-2">
-                    <span className="font-bold text-gray-600 flex items-center gap-1"><Settings size={14}/> データ管理</span>
-                    <div className="flex gap-2">
-                      <button onClick={exportData} className="flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-200">
-                        <FileDown size={14}/> 保存
-                      </button>
-                      <label className="flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-200 cursor-pointer">
-                        <FileUp size={14}/> 復元
-                        <input type="file" accept=".json" onChange={importData} className="hidden" ref={fileInputRefImport} />
-                      </label>
-                    </div>
-                  </div>
+            <div className="flex gap-2">
+              <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${isSettingsOpen ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}>
+                <Settings size={20} />
+              </button>
+              
+              {/* 長押し保存ボタン (手動生成) */}
+              <button onClick={handleManualSave} disabled={isGenerating} className="p-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 flex items-center gap-1 text-xs font-bold whitespace-nowrap">
+                <Smartphone size={18} /> <span className="hidden sm:inline">長押し保存</span>
+              </button>
 
-                  <label className="block font-bold mb-2 text-gray-600 flex items-center gap-1"><UserPlus size={14}/> キャスト登録</label>
-                  <div className="flex gap-2 mb-3">
-                    <input type="text" value={newCastNameInput} onChange={(e) => setNewCastNameInput(e.target.value)} className="border p-2 rounded flex-1 outline-none" placeholder="名前" />
-                    <button onClick={addNewCast} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 font-bold text-xs whitespace-nowrap">追加</button>
-                  </div>
-                  
-                  <div className="border-t pt-2">
-                    <label className="block text-xs font-bold text-gray-500 mb-1">登録済み ({registeredCasts.length})</label>
-                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
-                      {registeredCasts.map(name => (
-                        <span key={name} className="bg-gray-100 border border-gray-200 px-2 py-1 rounded text-xs flex items-center gap-1 font-bold text-gray-700 group">
-                          {name}
-                          <button onClick={() => removeCast(name)} className="text-gray-400 hover:text-red-500 p-0.5 rounded-full hover:bg-gray-200"><X size={12}/></button>
-                        </span>
-                      ))}
-                    </div>
+              {/* 自動保存ボタン (シェア) */}
+              <button 
+                onClick={handleAutoSave} 
+                disabled={isGenerating}
+                className={`flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm ${isGenerating ? 'opacity-50' : ''}`}
+              >
+                <Share size={18} /> {isGenerating ? '...' : '保存'}
+              </button>
+            </div>
+          </div>
+
+          {isSettingsOpen && (
+            <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm animate-in slide-in-from-top-2">
+              <div className="p-3 bg-gray-50 rounded border">
+                {/* データ管理 */}
+                <div className="flex items-center justify-between mb-4 border-b pb-2">
+                  <span className="font-bold text-gray-600 flex items-center gap-1"><Settings size={14}/> データ管理</span>
+                  <div className="flex gap-2">
+                    <button onClick={exportData} className="flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-200">
+                      <FileDown size={14}/> 保存
+                    </button>
+                    <label className="flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-200 cursor-pointer">
+                      <FileUp size={14}/> 復元
+                      <input type="file" accept=".json" onChange={importData} className="hidden" ref={fileInputRefImport} />
+                    </label>
                   </div>
                 </div>
 
-                <div className="p-3 bg-gray-50 rounded border space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ</label>
-                    <div className="flex gap-2 items-center">
-                      <button onClick={() => setIsLogoWhite(!isLogoWhite)} className={`flex items-center gap-1 px-2 py-1 rounded text-xs border font-bold ${isLogoWhite ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-800 border-gray-300'}`}>
-                         {isLogoWhite ? <ToggleRight size={16}/> : <ToggleLeft size={16}/>}
-                         {isLogoWhite ? '白' : '黒'}
-                      </button>
-                      <button onClick={() => fileInputRefLogo.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">変更</button>
-                      <input type="file" accept="image/*" ref={fileInputRefLogo} onChange={(e) => handleImageUpload(e, setLogoImage)} className="hidden" />
-                    </div>
-                  </div>
-                  <div className="border-t pt-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> 背景</label>
-                      <div className="flex gap-2">
-                          {backgroundImage && <button onClick={() => setBackgroundImage(null)} className="text-xs text-red-500 underline">削除</button>}
-                          <button onClick={() => fileInputRefBg.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">選択</button>
-                          <input type="file" accept="image/*" ref={fileInputRefBg} onChange={(e) => handleImageUpload(e, setBackgroundImage)} className="hidden" />
-                      </div>
-                    </div>
-                    {backgroundImage && (
-                      <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
-                        <div className="flex items-center gap-2">
-                           <span className="text-xs font-bold w-12 text-right">Zoom</span>
-                           <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <span className="text-xs font-bold w-12 text-right">横</span>
-                           <input type="range" min="-100" max="200" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <span className="text-xs font-bold w-12 text-right">縦</span>
-                           <input type="range" min="-100" max="200" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="border-t pt-2">
-                    <div className="flex items-center gap-2">
-                       <MoveVertical size={14} className="text-gray-600"/>
-                       <span className="text-xs font-bold w-20">隙間</span>
-                       <input type="range" min="0" max="600" step="10" value={headerGap} onChange={(e) => setHeaderGap(Number(e.target.value))} className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t mt-2">
-                     <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> 全リセット</button>
+                <label className="block font-bold mb-2 text-gray-600 flex items-center gap-1"><UserPlus size={14}/> キャスト登録</label>
+                <div className="flex gap-2 mb-3">
+                  <input type="text" value={newCastNameInput} onChange={(e) => setNewCastNameInput(e.target.value)} className="border p-2 rounded flex-1 outline-none" placeholder="名前" />
+                  <button onClick={addNewCast} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 font-bold text-xs whitespace-nowrap">追加</button>
+                </div>
+                
+                <div className="border-t pt-2">
+                  <label className="block text-xs font-bold text-gray-500 mb-1">登録済み ({registeredCasts.length})</label>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                    {registeredCasts.map(name => (
+                      <span key={name} className="bg-gray-100 border border-gray-200 px-2 py-1 rounded text-xs flex items-center gap-1 font-bold text-gray-700 group">
+                        {name}
+                        <button onClick={() => removeCast(name)} className="text-gray-400 hover:text-red-500 p-0.5 rounded-full hover:bg-gray-200"><X size={12}/></button>
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* --- スクショモード閉じるボタン --- */}
-      {isPreviewMode && showPreviewControls && (
-        <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center gap-2 no-print w-full pointer-events-none">
-          <div className="bg-black/50 text-white text-xs px-3 py-1 rounded-full mb-2">画面をタップしてボタンを隠す</div>
-          <button 
-            onClick={() => setIsPreviewMode(false)}
-            className="bg-gray-900/90 backdrop-blur text-white px-8 py-3 rounded-full font-bold shadow-2xl text-base border border-gray-500 flex items-center gap-2 hover:bg-black transition-all pointer-events-auto"
-          >
-            <X size={20} /> 編集に戻る
-          </button>
+              <div className="p-3 bg-gray-50 rounded border space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ</label>
+                  <div className="flex gap-2 items-center">
+                    <button onClick={() => setIsLogoWhite(!isLogoWhite)} className={`flex items-center gap-1 px-2 py-1 rounded text-xs border font-bold ${isLogoWhite ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-800 border-gray-300'}`}>
+                       {isLogoWhite ? <ToggleRight size={16}/> : <ToggleLeft size={16}/>}
+                       {isLogoWhite ? '白' : '黒'}
+                    </button>
+                    <button onClick={() => fileInputRefLogo.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">変更</button>
+                    <input type="file" accept="image/*" ref={fileInputRefLogo} onChange={(e) => handleImageUpload(e, setLogoImage)} className="hidden" />
+                  </div>
+                </div>
+                <div className="border-t pt-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> 背景</label>
+                    <div className="flex gap-2">
+                        {backgroundImage && <button onClick={() => setBackgroundImage(null)} className="text-xs text-red-500 underline">削除</button>}
+                        <button onClick={() => fileInputRefBg.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">選択</button>
+                        <input type="file" accept="image/*" ref={fileInputRefBg} onChange={(e) => handleImageUpload(e, setBackgroundImage)} className="hidden" />
+                    </div>
+                  </div>
+                  {backgroundImage && (
+                    <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
+                      <div className="flex items-center gap-2">
+                         <span className="text-xs font-bold w-12 text-right">Zoom</span>
+                         <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <span className="text-xs font-bold w-12 text-right">横</span>
+                         <input type="range" min="-100" max="200" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <span className="text-xs font-bold w-12 text-right">縦</span>
+                         <input type="range" min="-100" max="200" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t pt-2">
+                  <div className="flex items-center gap-2">
+                     <MoveVertical size={14} className="text-gray-600"/>
+                     <span className="text-xs font-bold w-20">隙間</span>
+                     <input type="range" min="0" max="600" step="10" value={headerGap} onChange={(e) => setHeaderGap(Number(e.target.value))} className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t mt-2">
+                   <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> 全リセット</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* --- カレンダー描画エリア --- */}
       <div 
