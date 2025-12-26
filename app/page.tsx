@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-// 【修正】不足していたアイコン(Trash2, Plus, Saveなど)を追加しました
-import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Camera } from 'lucide-react';
-import { toJpeg } from 'html-to-image';
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share } from 'lucide-react';
+import { toBlob } from 'html-to-image';
 
 // --- 型定義 ---
 type ShiftType = '早' | '遅' | 'OL' | 'その他';
@@ -67,6 +66,8 @@ export default function CalendarApp() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [showPreviewControls, setShowPreviewControls] = useState(true);
 
+  // 一時的にスケールを1に戻すためのフラグ
+  const [isCapturing, setIsCapturing] = useState(false);
   const [previewScale, setPreviewScale] = useState(1);
 
   const calendarRef = useRef<HTMLDivElement>(null);
@@ -74,7 +75,6 @@ export default function CalendarApp() {
   const fileInputRefBg = useRef<HTMLInputElement>(null);
   const fileInputRefLogo = useRef<HTMLInputElement>(null);
 
-  // 画像圧縮関数
   const compressImage = (file: File, maxWidth: number = 1024): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -104,7 +104,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v8'); // Version Up
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v9'); 
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -126,7 +126,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     const handleResize = () => {
-      if (calendarWrapperRef.current) {
+      if (calendarWrapperRef.current && !isCapturing) {
         const screenWidth = window.innerWidth;
         const scale = (screenWidth < 1100) ? (screenWidth - 32) / 1080 : 1; 
         setPreviewScale(Math.max(scale, 0.2)); 
@@ -135,7 +135,7 @@ export default function CalendarApp() {
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [isCapturing]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -144,7 +144,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v8', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v9', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -204,7 +204,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v8');
+      localStorage.removeItem('girlsbar_calendar_data_v9');
       window.location.reload();
     }
   };
@@ -220,43 +220,67 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 画像保存ロジック (Direct Download) ---
+  // --- 画像保存ロジック (Web Share API / Download Fallback) ---
   const handleSaveImage = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     
-    window.scrollTo(0,0); // ズレ防止のためスクロールリセット
+    // 1. キャプチャモードにする（スケールを1に戻す）
+    setIsCapturing(true);
+
+    // 描画更新を待つための短い遅延
+    await new Promise(resolve => setTimeout(resolve, 100));
+    window.scrollTo(0, 0);
 
     try {
-      // 1. 画像データを生成
-      const dataUrl = await toJpeg(calendarRef.current, {
-        quality: 0.9,
-        pixelRatio: 1, // スマホの拡大率を無視して等倍で作成
+      // 2. Blobとして生成
+      const blob = await toBlob(calendarRef.current, {
+        quality: 0.95,
+        pixelRatio: 1, // 等倍
         backgroundColor: '#ffffff',
-        // 【重要】サイズ強制指定と変形解除で「ズレ」を防ぐ
-        width: 1080, 
-        height: calendarRef.current.scrollHeight, 
+        width: 1080,
+        height: calendarRef.current.offsetHeight, // 高さは成り行き
         style: { 
-          transform: 'none', 
-          transformOrigin: 'top left',
-          width: '1080px',
-          height: 'auto'
+            transform: 'none', // 変形を強制解除
+            margin: '0',
+            padding: '0'
         } 
       });
 
-      // 2. 自動ダウンロードを試みる
-      const link = document.createElement('a');
-      link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`;
-      link.href = dataUrl;
-      link.click();
+      if (!blob) throw new Error('Blob generation failed');
 
-      // 3. 念のためプレビューモーダルにもセット（ダウンロード失敗時の保険）
-      setGeneratedImage(dataUrl);
+      // 3. Web Share API (スマホ用)
+      const file = new File([blob], `shift_${year}_${month}.jpg`, { type: 'image/jpeg' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'シフト表',
+            text: `${year}年${month}月のシフト表です`
+          });
+        } catch (shareError) {
+           console.log('Share canceled or failed', shareError);
+           // シェアキャンセル時は何もしない
+        }
+      } else {
+        // 4. PC/Android等フォールバック: ダウンロード
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`;
+        link.href = url;
+        link.click();
+        
+        // 念のため長押し用にも表示
+        setGeneratedImage(url);
+      }
 
     } catch (err) {
       console.error('Save failed', err);
       alert('保存に失敗しました。');
     } finally {
+      // 5. 元のプレビューモードに戻す
+      setIsCapturing(false);
       setIsGenerating(false);
     }
   };
@@ -287,14 +311,13 @@ export default function CalendarApp() {
         <div className="fixed inset-0 z-40" onClick={() => setShowPreviewControls(!showPreviewControls)}></div>
       )}
 
-      {/* --- 生成後の画像確認・手動保存モーダル (自動保存が失敗した場合用) --- */}
+      {/* --- 生成後の画像確認（シェア非対応端末用） --- */}
       {generatedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="text-white text-center mb-2 font-bold text-sm">
-             画像が保存されました。<br/>もし保存されていない場合は、画像を長押しして保存してください。
+             画像を長押しして保存してください
           </div>
           <div className="relative w-full max-w-sm overflow-hidden rounded-lg shadow-2xl ring-2 ring-white/20">
-             {/* ズレ防止のため object-contain を適用 */}
              <img src={generatedImage} alt="Generated Calendar" className="w-full h-auto object-contain" />
           </div>
           <button 
@@ -345,12 +368,13 @@ export default function CalendarApp() {
                   <Eye size={18} /> <span className="hidden sm:inline">スクショ</span>
                 </button>
 
+                {/* 保存ボタン: シェアアイコンに変更 */}
                 <button 
                   onClick={handleSaveImage} 
                   disabled={isGenerating}
                   className={`flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm ${isGenerating ? 'opacity-50' : ''}`}
                 >
-                  <Download size={18} /> {isGenerating ? '保存中...' : '画像保存'}
+                  <Share size={18} /> {isGenerating ? '処理中...' : '画像を保存'}
                 </button>
               </div>
             </div>
@@ -436,14 +460,20 @@ export default function CalendarApp() {
       )}
 
       {/* --- カレンダー描画エリア --- */}
-      <div className={`scale-container ${isPreviewMode ? 'items-center min-h-screen py-10' : ''}`} ref={calendarWrapperRef}>
+      {/* キャプチャ中は中央揃え・スケール1にするためのクラス制御 */}
+      <div 
+         className={`scale-container ${isPreviewMode ? 'items-center min-h-screen py-10' : ''}`} 
+         ref={calendarWrapperRef}
+         style={isCapturing ? { width: '1080px', margin: '0 auto', overflow: 'visible' } : {}}
+      >
         <div 
            style={{ 
-             transform: `scale(${previewScale})`, 
+             // キャプチャ中はスケール1、それ以外はレスポンシブスケール
+             transform: `scale(${isCapturing ? 1 : previewScale})`, 
              transformOrigin: 'top center',
              width: '1080px',
              height: 'auto',
-             marginBottom: isPreviewMode ? '100px' : `-${(1080 * (1 - previewScale))}px`
+             marginBottom: (isPreviewMode || isCapturing) ? '100px' : `-${(1080 * (1 - previewScale))}px`
            }}
            className="saving-target"
         >
