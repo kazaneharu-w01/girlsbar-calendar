@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye } from 'lucide-react';
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 // --- 型定義 ---
