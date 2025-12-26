@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share } from 'lucide-react';
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Share } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 
 // --- 型定義 ---
@@ -62,12 +62,10 @@ export default function CalendarApp() {
   const [saveError, setSaveError] = useState<string | null>(null);
   
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [showPreviewControls, setShowPreviewControls] = useState(true);
 
-  // 一時的にスケールを1に戻すためのフラグ
-  const [isCapturing, setIsCapturing] = useState(false);
+  // 【重要】自動ズーム用のスケール管理
   const [previewScale, setPreviewScale] = useState(1);
 
   const calendarRef = useRef<HTMLDivElement>(null);
@@ -104,7 +102,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v9'); 
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v10'); // Version Up
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -124,18 +122,20 @@ export default function CalendarApp() {
     setIsLoaded(true);
   }, []);
 
+  // --- 【復活】自動ズーム計算ロジック ---
   useEffect(() => {
     const handleResize = () => {
-      if (calendarWrapperRef.current && !isCapturing) {
-        const screenWidth = window.innerWidth;
-        const scale = (screenWidth < 1100) ? (screenWidth - 32) / 1080 : 1; 
-        setPreviewScale(Math.max(scale, 0.2)); 
-      }
+      // 画面幅から、1080pxのカレンダーを表示するための縮小率を計算
+      const screenWidth = window.innerWidth;
+      const targetWidth = 1080; 
+      // 左右に少し余白(32px)を持たせる
+      const scale = (screenWidth < 1100) ? (screenWidth - 32) / targetWidth : 1;
+      setPreviewScale(Math.max(scale, 0.2)); 
     };
-    handleResize();
+    handleResize(); // 初回実行
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [isCapturing]);
+  }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -144,7 +144,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v9', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v10', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -204,7 +204,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v9');
+      localStorage.removeItem('girlsbar_calendar_data_v10');
       window.location.reload();
     }
   };
@@ -220,28 +220,25 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 画像保存ロジック (Web Share API / Download Fallback) ---
+  // --- 画像保存ロジック (Share API / Blob) ---
   const handleSaveImage = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     
-    // 1. キャプチャモードにする（スケールを1に戻す）
-    setIsCapturing(true);
-
-    // 描画更新を待つための短い遅延
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // スクロールリセットでズレ防止
     window.scrollTo(0, 0);
 
     try {
-      // 2. Blobとして生成
+      // 1. 画像データを生成 (Blob)
+      // 【重要】ここで style: { transform: 'none' } を指定することで
+      // 画面上の「縮小表示(previewScale)」を無視して、本来の1080pxサイズで書き出します。
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
-        pixelRatio: 1, // 等倍
-        backgroundColor: '#ffffff',
-        width: 1080,
-        height: calendarRef.current.offsetHeight, // 高さは成り行き
+        width: 1080, // 強制的に幅を1080pxに設定
+        height: calendarRef.current.scrollHeight, 
         style: { 
-            transform: 'none', // 変形を強制解除
+            transform: 'none', // 画面上の縮小を解除してキャプチャ
+            transformOrigin: 'top left',
             margin: '0',
             padding: '0'
         } 
@@ -249,38 +246,32 @@ export default function CalendarApp() {
 
       if (!blob) throw new Error('Blob generation failed');
 
-      // 3. Web Share API (スマホ用)
+      // 2. Web Share API (スマホ用: 共有シートを開く)
+      // これで「画像を保存」や「LINEで送信」が直接選べます
       const file = new File([blob], `shift_${year}_${month}.jpg`, { type: 'image/jpeg' });
       
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: 'シフト表',
-            text: `${year}年${month}月のシフト表です`
-          });
-        } catch (shareError) {
-           console.log('Share canceled or failed', shareError);
-           // シェアキャンセル時は何もしない
-        }
+        await navigator.share({
+          files: [file],
+          title: 'シフト表',
+          text: `${year}年${month}月のシフト表`
+        });
       } else {
-        // 4. PC/Android等フォールバック: ダウンロード
+        // PC等の場合: 通常ダウンロード
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`;
+        link.download = `shift_${year}_${month}.jpg`;
         link.href = url;
         link.click();
-        
-        // 念のため長押し用にも表示
-        setGeneratedImage(url);
       }
 
     } catch (err) {
       console.error('Save failed', err);
-      alert('保存に失敗しました。');
+      // シェアキャンセルはエラーではないのでアラートを出さない
+      if ((err as Error).name !== 'AbortError') {
+        alert('保存に失敗しました。');
+      }
     } finally {
-      // 5. 元のプレビューモードに戻す
-      setIsCapturing(false);
       setIsGenerating(false);
     }
   };
@@ -306,27 +297,8 @@ export default function CalendarApp() {
   return (
     <div className={`min-h-screen bg-gray-100 font-sans text-gray-800 ${isPreviewMode ? 'bg-black' : 'pb-20'}`}>
       
-      {/* プレビュー画面でのタップ判定 */}
       {isPreviewMode && (
         <div className="fixed inset-0 z-40" onClick={() => setShowPreviewControls(!showPreviewControls)}></div>
-      )}
-
-      {/* --- 生成後の画像確認（シェア非対応端末用） --- */}
-      {generatedImage && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="text-white text-center mb-2 font-bold text-sm">
-             画像を長押しして保存してください
-          </div>
-          <div className="relative w-full max-w-sm overflow-hidden rounded-lg shadow-2xl ring-2 ring-white/20">
-             <img src={generatedImage} alt="Generated Calendar" className="w-full h-auto object-contain" />
-          </div>
-          <button 
-            onClick={() => setGeneratedImage(null)}
-            className="mt-6 bg-white text-black px-8 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-gray-200 transition-colors"
-          >
-            <Check size={20} /> 閉じる
-          </button>
-        </div>
       )}
 
       {!isPreviewMode && saveError && (
@@ -368,7 +340,6 @@ export default function CalendarApp() {
                   <Eye size={18} /> <span className="hidden sm:inline">スクショ</span>
                 </button>
 
-                {/* 保存ボタン: シェアアイコンに変更 */}
                 <button 
                   onClick={handleSaveImage} 
                   disabled={isGenerating}
@@ -459,24 +430,29 @@ export default function CalendarApp() {
         </div>
       )}
 
-      {/* --- カレンダー描画エリア --- */}
-      {/* キャプチャ中は中央揃え・スケール1にするためのクラス制御 */}
+      {/* --- カレンダー描画エリア (自動ズームコンテナ) --- */}
+      {/* 【仕組み解説】
+         1. scale-container: 中央揃えにする外枠
+         2. div (transform: scale): previewScaleを使って中身を縮小表示。
+            ただし、marginBottomで縮小分の空白を詰めることで、
+            スマホ画面でも「余白だらけ」にならずに全体を表示できる。
+      */}
       <div 
          className={`scale-container ${isPreviewMode ? 'items-center min-h-screen py-10' : ''}`} 
          ref={calendarWrapperRef}
-         style={isCapturing ? { width: '1080px', margin: '0 auto', overflow: 'visible' } : {}}
+         style={{ width: '100%', display: 'flex', justifyContent: 'center', overflow: 'hidden' }}
       >
         <div 
            style={{ 
-             // キャプチャ中はスケール1、それ以外はレスポンシブスケール
-             transform: `scale(${isCapturing ? 1 : previewScale})`, 
+             transform: `scale(${previewScale})`, 
              transformOrigin: 'top center',
-             width: '1080px',
+             width: '1080px', // 中身は常に1080px固定
              height: 'auto',
-             marginBottom: (isPreviewMode || isCapturing) ? '100px' : `-${(1080 * (1 - previewScale))}px`
+             // 縮小した分、下の余白が空きすぎるのを防ぐ計算
+             marginBottom: isPreviewMode ? '100px' : `-${(1080 * (1 - previewScale))}px`
            }}
-           className="saving-target"
         >
+          {/* --- ここが画像化されるターゲット (ref={calendarRef}) --- */}
           <div 
             ref={calendarRef} 
             className="bg-white min-w-[1080px] relative bg-no-repeat overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
