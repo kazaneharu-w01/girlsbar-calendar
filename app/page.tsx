@@ -44,7 +44,11 @@ export default function CalendarApp() {
   const [bgY, setBgY] = useState(50);
   const [headerGap, setHeaderGap] = useState(20);
 
-  const [registeredCasts, setRegisteredCasts] = useState<string[]>(['キャストA', 'キャストB', 'キャストC']);
+  // 【修正】デフォルトキャストリストを変更
+  const [registeredCasts, setRegisteredCasts] = useState<string[]>([
+    'もねまろ', 'ころすけ', 'あんそにー', 'たろう', 'ななし',
+    'てんか', 'かずと', 'よう', 'ゆえ', 'ひな', 'むつ'
+  ]);
   
   const [newCastNameInput, setNewCastNameInput] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -65,7 +69,7 @@ export default function CalendarApp() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [showPreviewControls, setShowPreviewControls] = useState(true);
 
-  // 【重要】自動ズーム用のスケール管理
+  // 自動ズーム用のスケール管理
   const [previewScale, setPreviewScale] = useState(1);
 
   const calendarRef = useRef<HTMLDivElement>(null);
@@ -102,7 +106,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v10'); // Version Up
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v11'); // Version Up
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -122,17 +126,15 @@ export default function CalendarApp() {
     setIsLoaded(true);
   }, []);
 
-  // --- 【復活】自動ズーム計算ロジック ---
+  // 自動ズーム計算ロジック
   useEffect(() => {
     const handleResize = () => {
-      // 画面幅から、1080pxのカレンダーを表示するための縮小率を計算
       const screenWidth = window.innerWidth;
       const targetWidth = 1080; 
-      // 左右に少し余白(32px)を持たせる
       const scale = (screenWidth < 1100) ? (screenWidth - 32) / targetWidth : 1;
       setPreviewScale(Math.max(scale, 0.2)); 
     };
-    handleResize(); // 初回実行
+    handleResize(); 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -144,7 +146,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v10', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v11', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -202,9 +204,16 @@ export default function CalendarApp() {
     }
   };
 
+  // 【追加】キャスト削除機能
+  const removeCast = (nameToRemove: string) => {
+    if (confirm(`${nameToRemove} を登録リストから削除しますか？`)) {
+      setRegisteredCasts(registeredCasts.filter(name => name !== nameToRemove));
+    }
+  };
+
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v10');
+      localStorage.removeItem('girlsbar_calendar_data_v11');
       window.location.reload();
     }
   };
@@ -220,24 +229,19 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 画像保存ロジック (Share API / Blob) ---
+  // --- 画像保存ロジック ---
   const handleSaveImage = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
-    
-    // スクロールリセットでズレ防止
     window.scrollTo(0, 0);
 
     try {
-      // 1. 画像データを生成 (Blob)
-      // 【重要】ここで style: { transform: 'none' } を指定することで
-      // 画面上の「縮小表示(previewScale)」を無視して、本来の1080pxサイズで書き出します。
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
-        width: 1080, // 強制的に幅を1080pxに設定
+        width: 1080, 
         height: calendarRef.current.scrollHeight, 
         style: { 
-            transform: 'none', // 画面上の縮小を解除してキャプチャ
+            transform: 'none', 
             transformOrigin: 'top left',
             margin: '0',
             padding: '0'
@@ -246,8 +250,6 @@ export default function CalendarApp() {
 
       if (!blob) throw new Error('Blob generation failed');
 
-      // 2. Web Share API (スマホ用: 共有シートを開く)
-      // これで「画像を保存」や「LINEで送信」が直接選べます
       const file = new File([blob], `shift_${year}_${month}.jpg`, { type: 'image/jpeg' });
       
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -257,17 +259,15 @@ export default function CalendarApp() {
           text: `${year}年${month}月のシフト表`
         });
       } else {
-        // PC等の場合: 通常ダウンロード
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.download = `shift_${year}_${month}.jpg`;
+        link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`;
         link.href = url;
         link.click();
       }
 
     } catch (err) {
       console.error('Save failed', err);
-      // シェアキャンセルはエラーではないのでアラートを出さない
       if ((err as Error).name !== 'AbortError') {
         alert('保存に失敗しました。');
       }
@@ -354,12 +354,25 @@ export default function CalendarApp() {
               <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm animate-in slide-in-from-top-2">
                 <div className="p-3 bg-gray-50 rounded border">
                   <label className="block font-bold mb-2 text-gray-600 flex items-center gap-1"><UserPlus size={14}/> キャスト登録</label>
-                  <div className="flex gap-2 mb-1">
+                  <div className="flex gap-2 mb-3">
                     <input type="text" value={newCastNameInput} onChange={(e) => setNewCastNameInput(e.target.value)} className="border p-2 rounded flex-1 outline-none" placeholder="名前" />
                     <button onClick={addNewCast} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 font-bold text-xs whitespace-nowrap">追加</button>
                   </div>
-                  <div className="text-xs text-gray-400">{registeredCasts.length}名登録中</div>
+                  
+                  {/* 【追加】キャスト削除UI */}
+                  <div className="border-t pt-2">
+                    <label className="block text-xs font-bold text-gray-500 mb-1">登録済み ({registeredCasts.length})</label>
+                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                      {registeredCasts.map(name => (
+                        <span key={name} className="bg-gray-100 border border-gray-200 px-2 py-1 rounded text-xs flex items-center gap-1 font-bold text-gray-700 group">
+                          {name}
+                          <button onClick={() => removeCast(name)} className="text-gray-400 hover:text-red-500 p-0.5 rounded-full hover:bg-gray-200"><X size={12}/></button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+
                 <div className="p-3 bg-gray-50 rounded border space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ</label>
@@ -430,13 +443,7 @@ export default function CalendarApp() {
         </div>
       )}
 
-      {/* --- カレンダー描画エリア (自動ズームコンテナ) --- */}
-      {/* 【仕組み解説】
-         1. scale-container: 中央揃えにする外枠
-         2. div (transform: scale): previewScaleを使って中身を縮小表示。
-            ただし、marginBottomで縮小分の空白を詰めることで、
-            スマホ画面でも「余白だらけ」にならずに全体を表示できる。
-      */}
+      {/* --- カレンダー描画エリア --- */}
       <div 
          className={`scale-container ${isPreviewMode ? 'items-center min-h-screen py-10' : ''}`} 
          ref={calendarWrapperRef}
@@ -446,13 +453,11 @@ export default function CalendarApp() {
            style={{ 
              transform: `scale(${previewScale})`, 
              transformOrigin: 'top center',
-             width: '1080px', // 中身は常に1080px固定
+             width: '1080px',
              height: 'auto',
-             // 縮小した分、下の余白が空きすぎるのを防ぐ計算
              marginBottom: isPreviewMode ? '100px' : `-${(1080 * (1 - previewScale))}px`
            }}
         >
-          {/* --- ここが画像化されるターゲット (ref={calendarRef}) --- */}
           <div 
             ref={calendarRef} 
             className="bg-white min-w-[1080px] relative bg-no-repeat overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
