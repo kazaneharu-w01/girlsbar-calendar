@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
+// 【修正】Star を確実に含めました
 import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera } from 'lucide-react';
 import { toBlob, toJpeg } from 'html-to-image';
 
@@ -121,7 +122,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v18'); 
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v20'); // Version 20
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -160,7 +161,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v18', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v20', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -226,7 +227,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v18');
+      localStorage.removeItem('girlsbar_calendar_data_v20');
       window.location.reload();
     }
   };
@@ -286,35 +287,26 @@ export default function CalendarApp() {
     }
   };
 
-  // --- ヘルパー：ウォームアップ（描画遅延対策） ---
-  const warmUpEngine = async () => {
-    if (!calendarRef.current) return;
-    try {
-        // 見えない状態で一度実行してキャッシュさせる
-        await toJpeg(calendarRef.current, {
-            quality: 0.1,
-            width: 100,
-            height: 100,
-            style: { opacity: '0' }
-        });
-    } catch (e) {
-        console.log("Warmup skipped");
-    }
-  };
-
-  // --- 自動保存（シェア/ダウンロード） ---
+  // --- 自動保存（シェア） with ダブルショット ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // 1. ウォームアップ（これで背景白飛びを防ぐ）
-      await warmUpEngine();
-      // 少し待つ
-      await new Promise(r => setTimeout(r, 100));
+      // 1. ダミー変換 (1回目) - 読み込みを確定させるため
+      await toJpeg(calendarRef.current, {
+        quality: 0.1,
+        width: 1080, 
+        height: calendarRef.current.scrollHeight,
+        pixelRatio: 1, 
+        style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
+      });
 
-      // 2. 本番生成
+      // 2. 少し待機 (ブラウザの描画完了待ち)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 3. 本番変換 (2回目) - ここで確実なデータを作る
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
@@ -350,17 +342,26 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存（画像生成して表示） ---
+  // --- 長押し保存（画像生成して表示） with ダブルショット ---
   const handleManualSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // ここでもウォームアップを入れる
-      await warmUpEngine();
-      await new Promise(r => setTimeout(r, 100));
+      // 1. ダミー変換
+      await toJpeg(calendarRef.current, {
+        quality: 0.1,
+        width: 1080,
+        height: calendarRef.current.scrollHeight,
+        pixelRatio: 1,
+        style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
+      });
 
+      // 2. 待機
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // 3. 本番変換
       const dataUrl = await toJpeg(calendarRef.current, {
         quality: 0.95,
         width: 1080,
@@ -457,10 +458,12 @@ export default function CalendarApp() {
                 <Settings size={20} />
               </button>
               
+              {/* 長押し保存ボタン */}
               <button onClick={handleManualSave} disabled={isGenerating} className="p-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 flex items-center gap-1 text-xs font-bold whitespace-nowrap">
                 <Smartphone size={18} /> <span className="hidden sm:inline">長押し保存</span>
               </button>
 
+              {/* 自動保存ボタン (シェア) */}
               <button 
                 onClick={handleAutoSave} 
                 disabled={isGenerating}
@@ -474,6 +477,7 @@ export default function CalendarApp() {
           {isSettingsOpen && (
             <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm animate-in slide-in-from-top-2">
               <div className="p-3 bg-gray-50 rounded border">
+                {/* データ管理 */}
                 <div className="flex items-center justify-between mb-4 border-b pb-2">
                   <span className="font-bold text-gray-600 flex items-center gap-1"><Settings size={14}/> データ管理</span>
                   <div className="flex gap-2">
@@ -581,11 +585,10 @@ export default function CalendarApp() {
             ref={calendarRef} 
             className="relative min-w-[1080px] overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
           >
-            
             {/* レイヤー1: ベース白背景 */}
             <div className="absolute inset-0 bg-white z-0"></div>
 
-            {/* レイヤー2: 背景画像（スライダーで動く） */}
+            {/* レイヤー2: 背景画像 */}
             {backgroundImage && (
               <div className="absolute inset-0 overflow-hidden z-0">
                 <img 
