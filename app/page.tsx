@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-// 【修正】Star をインポートに追加しました
 import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera } from 'lucide-react';
-import { toBlob, toJpeg } from 'html-to-image';
+// toJpegのみを使用（安定しているため）
+import { toJpeg } from 'html-to-image';
 
 // --- 型定義 ---
 type ShiftType = '早' | '遅' | 'OL' | 'その他';
@@ -18,7 +18,6 @@ type Shift = {
 
 type EventMap = { [key: number]: string };
 
-// バックアップデータ型
 type BackupData = {
   shifts: Shift[];
   eventMap: EventMap;
@@ -57,8 +56,8 @@ export default function CalendarApp() {
   const [isLogoWhite, setIsLogoWhite] = useState(false);
   
   const [bgZoom, setBgZoom] = useState(100);
-  const [bgX, setBgX] = useState(50);
-  const [bgY, setBgY] = useState(50);
+  const [bgX, setBgX] = useState(0); // 初期値を0に変更
+  const [bgY, setBgY] = useState(0); // 初期値を0に変更
   const [headerGap, setHeaderGap] = useState(20);
 
   const [registeredCasts, setRegisteredCasts] = useState<string[]>([
@@ -123,7 +122,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v16'); 
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v17'); 
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -162,7 +161,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v16', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v17', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -228,7 +227,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v16');
+      localStorage.removeItem('girlsbar_calendar_data_v17');
       window.location.reload();
     }
   };
@@ -295,7 +294,9 @@ export default function CalendarApp() {
     window.scrollTo(0, 0);
 
     try {
-      const blob = await toBlob(calendarRef.current, {
+      // 【修正】toJpegを使ってデータを作成し、それをFileに変換するフローに変更
+      // toBlobよりもtoJpegの方が成功率が高いという実績に基づきます
+      const dataUrl = await toJpeg(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
         height: calendarRef.current.scrollHeight,
@@ -303,8 +304,9 @@ export default function CalendarApp() {
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
-      if (!blob) throw new Error('Blob generation failed');
-
+      // DataURL -> Blob -> File 変換
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
       const file = new File([blob], `shift_${year}_${month}.jpg`, { type: 'image/jpeg' });
       
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -314,16 +316,16 @@ export default function CalendarApp() {
           text: `${year}年${month}月のシフト表`
         });
       } else {
-        const url = URL.createObjectURL(blob);
+        // PC等の場合: ダウンロード
         const link = document.createElement('a');
         link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`;
-        link.href = url;
+        link.href = dataUrl;
         link.click();
       }
     } catch (err) {
       console.error('Save failed', err);
       if ((err as Error).name !== 'AbortError') {
-        alert('保存に失敗しました。「長押し保存」を試してください。');
+        alert('保存に失敗しました。隣の「長押し保存」ボタンを試してください。');
       }
     } finally {
       setIsGenerating(false);
@@ -514,11 +516,12 @@ export default function CalendarApp() {
                       </div>
                       <div className="flex items-center gap-2">
                          <span className="text-xs font-bold w-12 text-right">横</span>
-                         <input type="range" min="-100" max="200" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                         {/* 【修正】スライドを%ではなくピクセル移動(translate)として使うため範囲を大きく */}
+                         <input type="range" min="-500" max="500" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                       </div>
                       <div className="flex items-center gap-2">
                          <span className="text-xs font-bold w-12 text-right">縦</span>
-                         <input type="range" min="-100" max="200" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                         <input type="range" min="-500" max="500" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                       </div>
                     </div>
                   )}
@@ -543,7 +546,7 @@ export default function CalendarApp() {
 
       {/* --- カレンダー描画エリア --- */}
       <div 
-         className={`scale-container ${isPreviewMode ? 'items-center min-h-screen py-10' : ''}`} 
+         className="scale-container"
          ref={calendarWrapperRef}
          style={{ width: '100%', display: 'flex', justifyContent: 'center', overflow: 'hidden' }}
       >
@@ -553,33 +556,33 @@ export default function CalendarApp() {
              transformOrigin: 'top center',
              width: '1080px',
              height: 'auto',
-             marginBottom: isPreviewMode ? '100px' : `-${(1080 * (1 - previewScale))}px`
+             marginBottom: `-${(1080 * (1 - previewScale))}px`
            }}
         >
           <div 
             ref={calendarRef} 
-            // 【重要】bg-whiteを削除し、透明なコンテナにする (背景画像の邪魔をしないため)
             className="relative min-w-[1080px] overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
           >
-            
-            {/* レイヤー1: ベースの白背景（画像がない時用、または画像の背後用） */}
+            {/* レイヤー1: ベース白背景 */}
             <div className="absolute inset-0 bg-white z-0"></div>
 
-            {/* レイヤー2: 背景画像 (<img>タグで確実に表示) */}
+            {/* レイヤー2: 背景画像（transformで動かす） */}
             {backgroundImage && (
-              <img 
-                src={backgroundImage} 
-                className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"
-                style={{
-                  objectPosition: `${bgX}% ${bgY}%`,
-                  transform: `scale(${bgZoom / 100})`
-                }}
-                alt=""
-                crossOrigin="anonymous" 
-              />
+              <div className="absolute inset-0 overflow-hidden z-0">
+                <img 
+                  src={backgroundImage} 
+                  className="w-full h-full object-cover origin-center"
+                  style={{
+                    // translateで動かす方式に変更（直感的に動く）
+                    transform: `translate(${bgX}px, ${bgY}px) scale(${bgZoom / 100})`
+                  }}
+                  alt=""
+                  crossOrigin="anonymous" 
+                />
+              </div>
             )}
 
-            {/* レイヤー3: コンテンツ (z-10で上に表示) */}
+            {/* レイヤー3: コンテンツ */}
             <div className="relative z-10 pt-4 pb-6 px-8">
               <div className="text-center">
                 <div className="flex justify-center mb-0">
@@ -600,7 +603,6 @@ export default function CalendarApp() {
                 </h1>
               </div>
 
-              {/* カレンダーグリッド (半透明白背景で読みやすく) */}
               <div className="border-4 border-gray-900 bg-white/90 shadow-lg rounded-sm overflow-hidden mt-4">
                 <div className="grid grid-cols-7 bg-gray-800 text-white font-bold text-center border-b-4 border-gray-900">
                   {['日', '月', '火', '水', '木', '金', '土'].map((d, i) => (
