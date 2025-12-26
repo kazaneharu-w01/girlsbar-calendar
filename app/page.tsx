@@ -11,7 +11,6 @@ type Shift = {
   day: number;
   castName: string;
   type: ShiftType;
-  // 【追加点3】BDフラグ
   isBD?: boolean;
 };
 
@@ -51,7 +50,6 @@ export default function CalendarApp() {
   const [inputName, setInputName] = useState('');
   const [inputType, setInputType] = useState<ShiftType>('早');
   const [isEventInput, setIsEventInput] = useState(false);
-  // 【追加点3】モーダル用BD入力状態
   const [isBDInput, setIsBDInput] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -118,9 +116,8 @@ export default function CalendarApp() {
     const handleResize = () => {
       if (calendarWrapperRef.current) {
         const screenWidth = window.innerWidth;
-        // モバイル等のパディングを考慮して計算
         const scale = (screenWidth < 1100) ? (screenWidth - 32) / 1080 : 1; 
-        setPreviewScale(Math.max(scale, 0.2)); // 最小でも0.2倍
+        setPreviewScale(Math.max(scale, 0.2)); 
       }
     };
     handleResize();
@@ -167,19 +164,15 @@ export default function CalendarApp() {
         day: selectedDay,
         castName: inputName,
         type: inputType,
-        // 【追加点3】BD状態を保存
         isBD: isBDInput,
       };
       setShifts([...shifts, newShift]);
     }
-    // イベントデー設定はシフト入力とは独立して保存
     if (isEventInput) {
       if (!eventDays.includes(selectedDay)) setEventDays([...eventDays, selectedDay]);
     } else {
       setEventDays(eventDays.filter(d => d !== selectedDay));
     }
-    
-    // リセット
     setInputName('');
     setIsBDInput(false);
     setIsModalOpen(false);
@@ -208,36 +201,48 @@ export default function CalendarApp() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const maxWidth = e.target === fileInputRefLogo.current ? 800 : 1280; // ロゴサイズ上限アップ
+        const maxWidth = e.target === fileInputRefLogo.current ? 800 : 1280;
         const compressedDataUrl = await compressImage(file, maxWidth);
         setImage(compressedDataUrl);
       } catch (err) { alert('画像の読み込みに失敗しました'); }
     }
   };
 
-  // 【修正点2】画像保存ロジックの修正
+  // 【修正点1】軽量化保存ロジック (Blob使用)
   const downloadImage = async () => {
     if (!calendarRef.current) return;
     try {
       calendarRef.current.classList.add('generating-image');
       
-      // html2canvasのオプションを調整
       const canvas = await html2canvas(calendarRef.current, {
-        scale: 1, // 【修正】スマホでの安定性のため標準解像度に変更 (2 -> 1)
-        useCORS: true, // 外部画像の読み込み許可
+        scale: 1.5, // 少し画質を上げる（Blobなら耐えられる可能性が高いため）
+        useCORS: true,
         allowTaint: true,
         backgroundColor: null,
         logging: false,
       });
       
       calendarRef.current.classList.remove('generating-image');
-      const link = document.createElement('a');
-      link.download = `${year}年${month}月${isSecondHalf ? '後半' : '前半'}シフト.png`;
-      link.href = canvas.toDataURL('image/png', 0.9); // 少し圧縮して軽量化
-      link.click();
+
+      // Blobとして出力（メモリ消費を抑える）
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          alert('画像の生成に失敗しました。');
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `${year}年${month}月${isSecondHalf ? '後半' : '前半'}シフト.png`;
+        link.href = url;
+        link.click();
+        
+        // メモリ解放
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+      }, 'image/png', 0.9);
+
     } catch (err) {
       console.error('画像生成エラー:', err);
-      alert('画像の保存に失敗しました。メモリ不足の可能性があります。');
+      alert('保存に失敗しました。スマホのメモリ不足の可能性があります。アプリを再起動してみてください。');
       calendarRef.current.classList.remove('generating-image');
     }
   };
@@ -246,7 +251,7 @@ export default function CalendarApp() {
     setSelectedDay(day);
     setInputName('');
     setIsEventInput(eventDays.includes(day));
-    setIsBDInput(false); // BDリセット
+    setIsBDInput(false);
     setIsModalOpen(true);
   };
 
@@ -392,21 +397,19 @@ export default function CalendarApp() {
               }}
             >
               
-              <div className="relative z-10 pt-8 pb-6 px-8">
+              {/* 【修正点3】余白の短縮 (pt-4, mb-1 に変更) */}
+              <div className="relative z-10 pt-4 pb-6 px-8">
                 {/* ヘッダー・ロゴ */}
-                <div className="text-center mb-4">
-                  <h1 className="text-4xl font-black tracking-wider mb-4 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900">
-                    {month}月{isSecondHalf ? '後半' : '前半'}シフト
-                  </h1>
+                <div className="text-center mb-1">
                   
-                  {/* 【修正点1】ロゴの巨大化 (w-full, h-[400px]などに変更) */}
-                  <div className="flex justify-center mb-4">
-                    <div className="w-full h-[450px] relative flex items-center justify-center"> 
+                  {/* 【修正点2】ロゴサイズ調整 (h-[280px]程度に変更) */}
+                  <div className="flex justify-center -mb-2">
+                    <div className="w-full h-[280px] relative flex items-center justify-center"> 
                       <img 
                         src={logoImage || '/logo.png'} 
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                         alt="店舗ロゴ" 
-                        className="w-full h-full object-contain drop-shadow-2xl" 
+                        className="w-full h-full object-contain drop-shadow-xl" 
                       />
                       {!logoImage && (
                           <div className="absolute inset-0 bg-gray-100/50 rounded-lg border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-500 font-bold backdrop-blur-sm -z-10">
@@ -415,6 +418,10 @@ export default function CalendarApp() {
                       )}
                     </div>
                   </div>
+
+                  <h1 className="text-4xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900 relative z-20">
+                    {month}月{isSecondHalf ? '後半' : '前半'}シフト
+                  </h1>
                 </div>
 
                 {/* カレンダーグリッド */}
@@ -460,7 +467,6 @@ export default function CalendarApp() {
                                     <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-8 font-bold flex items-center justify-center text-xs rounded-l border-y border-l border-black/10`}>
                                       {SHIFT_STYLES[shift.type].label}
                                     </span>
-                                    {/* 【追加点3】BDキャストの表示強調 */}
                                     <span className={`bg-gray-900 text-white font-bold px-2 py-1 flex-1 text-center truncate border-l border-white/20 rounded-r border-y border-r border-black/10 flex items-center justify-center gap-1 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
                                       {shift.isBD && <Cake size={14} className="text-yellow-400 fill-yellow-400 animate-pulse"/>}
                                       {shift.castName}
@@ -511,7 +517,6 @@ export default function CalendarApp() {
             
             <hr className="my-4 border-gray-100"/>
 
-            {/* 【追加点3】BD設定チェックボックス */}
             <div className="mb-4 bg-pink-50 p-3 rounded-xl border border-pink-100">
               <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700 justify-center">
                 <input type="checkbox" checked={isBDInput} onChange={(e) => setIsBDInput(e.target.checked)} className="w-5 h-5 accent-pink-500 rounded" />
