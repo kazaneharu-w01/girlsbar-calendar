@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Plus, Trash2, Star, Image as ImageIcon, UserPlus, Settings, Save, RotateCcw, AlertCircle, Cake, MoveVertical } from 'lucide-react';
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 // --- 型定義 ---
@@ -14,7 +14,6 @@ type Shift = {
   isBD?: boolean;
 };
 
-// 【修正点3】イベントデータをオブジェクトに変更（日付: タイトル）
 type EventMap = { [key: number]: string };
 
 // --- 設定: シフトの見た目 ---
@@ -33,18 +32,19 @@ export default function CalendarApp() {
   const [isSecondHalf, setIsSecondHalf] = useState(true);
   const [shifts, setShifts] = useState<Shift[]>([]);
   
-  // イベント管理（配列からMapに変更）
+  // イベント管理
   const [eventMap, setEventMap] = useState<EventMap>({});
   
   // 画像設定
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [logoImage, setLogoImage] = useState<string | null>('/logo.png'); 
+  // 【追加】ロゴの色反転フラグ
+  const [isLogoWhite, setIsLogoWhite] = useState(false);
   
-  // 背景調整パラメータ
+  // 背景・レイアウト調整
   const [bgZoom, setBgZoom] = useState(100);
   const [bgX, setBgX] = useState(50);
   const [bgY, setBgY] = useState(50);
-  // 【修正点2】余白調整用パラメータ
   const [headerGap, setHeaderGap] = useState(20);
 
   const [registeredCasts, setRegisteredCasts] = useState<string[]>(['キャストA', 'キャストB', 'キャストC']);
@@ -57,11 +57,15 @@ export default function CalendarApp() {
   const [inputName, setInputName] = useState('');
   const [inputType, setInputType] = useState<ShiftType>('早');
   
-  // モーダル用一時ステート
+  // モーダル用
   const [isEventInput, setIsEventInput] = useState(false);
-  const [eventTitleInput, setEventTitleInput] = useState(''); // イベントタイトル用
+  const [eventTitleInput, setEventTitleInput] = useState('');
   const [isBDInput, setIsBDInput] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // スクリーンショットモード（UI非表示）
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   const [previewScale, setPreviewScale] = useState(1);
 
@@ -101,21 +105,11 @@ export default function CalendarApp() {
   // --- データ読み込み ---
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v3'); // バージョンアップ
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v4'); // バージョンアップ
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
-        
-        // 旧データ(配列)からの移行対応
-        if (parsed.eventMap) {
-          setEventMap(parsed.eventMap);
-        } else if (parsed.eventDays) {
-          // 旧型式(number[])の場合は変換
-          const newMap: EventMap = {};
-          parsed.eventDays.forEach((d: number) => { newMap[d] = 'イベント'; });
-          setEventMap(newMap);
-        }
-
+        if (parsed.eventMap) setEventMap(parsed.eventMap);
         if (parsed.registeredCasts) setRegisteredCasts(parsed.registeredCasts);
         if (parsed.backgroundImage) setBackgroundImage(parsed.backgroundImage);
         if (parsed.logoImage) setLogoImage(parsed.logoImage);
@@ -125,6 +119,7 @@ export default function CalendarApp() {
         if (parsed.headerGap !== undefined) setHeaderGap(parsed.headerGap);
         if (parsed.year) setYear(parsed.year);
         if (parsed.month) setMonth(parsed.month);
+        if (parsed.isLogoWhite !== undefined) setIsLogoWhite(parsed.isLogoWhite);
       }
     } catch (e) {
       console.error("読み込みエラー", e);
@@ -151,18 +146,15 @@ export default function CalendarApp() {
     if (!isLoaded) return;
     const dataToSave = {
       shifts, eventMap, registeredCasts, backgroundImage, logoImage,
-      year, month, bgZoom, bgX, bgY, headerGap
+      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v3', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v4', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
-      console.error("保存失敗:", e);
-      if (e.name === 'QuotaExceededError') {
-        setSaveError('保存容量がいっぱいです。背景画像を削除してください。');
-      }
+      if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
     }
-  }, [shifts, eventMap, registeredCasts, backgroundImage, logoImage, year, month, bgZoom, bgX, bgY, headerGap, isLoaded]);
+  }, [shifts, eventMap, registeredCasts, backgroundImage, logoImage, year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, isLoaded]);
 
   // --- ロジック ---
   const getDaysArray = () => {
@@ -179,8 +171,6 @@ export default function CalendarApp() {
 
   const addShift = () => {
     if (!selectedDay) return;
-    
-    // シフト追加
     if (inputName) {
       const newShift: Shift = {
         id: Math.random().toString(36).substr(2, 9),
@@ -191,8 +181,6 @@ export default function CalendarApp() {
       };
       setShifts([...shifts, newShift]);
     }
-
-    // イベント更新
     const newEventMap = { ...eventMap };
     if (isEventInput) {
       newEventMap[selectedDay] = eventTitleInput || 'EVENT';
@@ -200,8 +188,6 @@ export default function CalendarApp() {
       delete newEventMap[selectedDay];
     }
     setEventMap(newEventMap);
-    
-    // リセット
     setInputName('');
     setIsBDInput(false);
     setIsModalOpen(false);
@@ -221,7 +207,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v3');
+      localStorage.removeItem('girlsbar_calendar_data_v4');
       window.location.reload();
     }
   };
@@ -237,63 +223,77 @@ export default function CalendarApp() {
     }
   };
 
-  // 【修正点1】リトライ機能付き保存ロジック
+  // --- 画像保存ロジック（超軽量化版） ---
   const downloadImage = async () => {
-    if (!calendarRef.current) return;
+    if (!calendarRef.current || isSaving) return;
+    setIsSaving(true);
     
-    const generate = async (scale: number) => {
-      calendarRef.current!.classList.add('generating-image');
+    // 保存処理
+    const processSave = async (scale: number) => {
+      // 1. 一時的に重いCSS（影など）を削除するためのクラスを付与
+      calendarRef.current!.classList.add('saving-mode');
+      
       try {
         const canvas = await html2canvas(calendarRef.current!, {
-          scale: scale, // 指定倍率で描画
+          scale: scale,
           useCORS: true,
           allowTaint: true,
           backgroundColor: null,
           logging: false,
+          scrollX: 0,
+          scrollY: 0,
+          // 以下の設定で余計な描画を省く
+          onclone: (clonedDoc) => {
+             const el = clonedDoc.querySelector('.saving-target') as HTMLElement;
+             if(el) {
+                 el.style.transform = 'none'; // 変形リセット
+                 el.style.boxShadow = 'none'; // 影削除
+             }
+          }
         });
         
-        calendarRef.current!.classList.remove('generating-image');
+        calendarRef.current!.classList.remove('saving-mode');
 
-        // Blob出力
         return new Promise<void>((resolve, reject) => {
           canvas.toBlob((blob) => {
-            if (!blob) { reject('Blob generation failed'); return; }
+            if (!blob) { reject('Blob作成失敗'); return; }
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.download = `${year}年${month}月${isSecondHalf ? '後半' : '前半'}シフト.png`;
             link.href = url;
             link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 100);
+            setTimeout(() => URL.revokeObjectURL(url), 500);
             resolve();
-          }, 'image/png', 0.9);
+          }, 'image/jpeg', 0.85); // PNGではなくJPEG(0.85)にすることでさらにメモリ節約
         });
 
       } catch (err) {
-        calendarRef.current!.classList.remove('generating-image');
+        calendarRef.current!.classList.remove('saving-mode');
         throw err;
       }
     };
 
     try {
-      // まず標準画質(1.0)でトライ
-      await generate(1.0);
+      // まず等倍(1.0)でトライ。これならメモリも食わないはず
+      await processSave(1.0);
     } catch (err) {
-      console.warn('1.0x failed, retrying with 0.8x...', err);
+      console.warn('First attempt failed, retrying low quality...', err);
       try {
-        // 失敗したら低画質(0.8)でリトライ
-        await generate(0.8);
-        alert('メモリ不足のため、少し画質を落として保存しました。');
-      } catch (retryErr) {
-        console.error('All save attempts failed', retryErr);
-        alert('保存に失敗しました。アプリを再起動するか、他のアプリを終了してから試してください。');
+        // 失敗したら低画質(0.7)でリトライ
+        await processSave(0.7);
+        alert('メモリ不足のため、画質を調整して保存しました。');
+      } catch (finalErr) {
+        console.error('Save failed', finalErr);
+        alert('保存できませんでした。\n「プレビューモード」ボタンを押して、スクリーンショットを撮る方法をお試しください。');
       }
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const openModal = (day: number) => {
     setSelectedDay(day);
     setInputName('');
-    // イベント状態の復元
     const title = eventMap[day];
     setIsEventInput(!!title);
     setEventTitleInput(title || '');
@@ -308,9 +308,14 @@ export default function CalendarApp() {
   if (!isLoaded) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-100 pb-20 font-sans text-gray-800">
+    <div className={`min-h-screen bg-gray-100 font-sans text-gray-800 ${isPreviewMode ? 'bg-black' : 'pb-20'}`}>
       <style jsx global>{`
-        .generating-image .no-print { display: none !important; }
+        .saving-mode .no-print { display: none !important; }
+        .saving-mode { 
+           /* 保存時は余計な装飾をカットしてメモリ節約 */
+           box-shadow: none !important; 
+           backdrop-filter: none !important;
+        }
         .scale-container {
           width: 100%;
           overflow: hidden;
@@ -319,251 +324,281 @@ export default function CalendarApp() {
         }
       `}</style>
 
-      {saveError && (
+      {/* エラー表示 */}
+      {!isPreviewMode && saveError && (
         <div className="bg-red-500 text-white p-2 text-center text-sm font-bold flex items-center justify-center gap-2">
           <AlertCircle size={16} /> {saveError}
           <button onClick={resetAllData} className="underline ml-2 bg-white text-red-500 px-2 rounded">Reset</button>
         </div>
       )}
 
-      {/* --- 操作パネル --- */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-sm mb-4">
-        <div className="max-w-4xl mx-auto flex flex-col gap-3">
-          
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 border border-gray-300 px-2 py-1 rounded bg-white shadow-sm">
-                 <select 
-                   value={year} 
-                   onChange={(e) => setYear(Number(e.target.value))} 
-                   className="bg-transparent font-bold text-lg outline-none appearance-none pr-1"
-                 >
-                   {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
-                 </select>
-                 <span className="text-xs font-bold text-gray-500">年</span>
-                 <div className="w-px h-4 bg-gray-300 mx-1"></div>
-                 <select 
-                   value={month} 
-                   onChange={(e) => setMonth(Number(e.target.value))} 
-                   className="bg-transparent font-bold text-lg outline-none appearance-none pr-1"
-                 >
-                   {monthsList.map(m => <option key={m} value={m}>{m}</option>)}
-                 </select>
-                 <span className="text-xs font-bold text-gray-500">月</span>
+      {/* --- 操作パネル (プレビューモード時は非表示) --- */}
+      {!isPreviewMode && (
+        <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-sm mb-4">
+          <div className="max-w-4xl mx-auto flex flex-col gap-3">
+            
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 border border-gray-300 px-2 py-1 rounded bg-white shadow-sm">
+                   <select 
+                     value={year} 
+                     onChange={(e) => setYear(Number(e.target.value))} 
+                     className="bg-transparent font-bold text-lg outline-none appearance-none pr-1"
+                   >
+                     {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
+                   </select>
+                   <span className="text-xs font-bold text-gray-500">年</span>
+                   <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                   <select 
+                     value={month} 
+                     onChange={(e) => setMonth(Number(e.target.value))} 
+                     className="bg-transparent font-bold text-lg outline-none appearance-none pr-1"
+                   >
+                     {monthsList.map(m => <option key={m} value={m}>{m}</option>)}
+                   </select>
+                   <span className="text-xs font-bold text-gray-500">月</span>
+                </div>
+                <div className="flex bg-gray-100 rounded p-1 text-xs border border-gray-200">
+                  <button onClick={() => setIsSecondHalf(false)} className={`px-3 py-1.5 rounded transition-all ${!isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>前半</button>
+                  <button onClick={() => setIsSecondHalf(true)} className={`px-3 py-1.5 rounded transition-all ${isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>後半</button>
+                </div>
               </div>
-              <div className="flex bg-gray-100 rounded p-1 text-xs border border-gray-200">
-                <button onClick={() => setIsSecondHalf(false)} className={`px-3 py-1.5 rounded transition-all ${!isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>前半</button>
-                <button onClick={() => setIsSecondHalf(true)} className={`px-3 py-1.5 rounded transition-all ${isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>後半</button>
+
+              <div className="flex gap-2">
+                <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${isSettingsOpen ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}>
+                  <Settings size={20} />
+                </button>
+                
+                {/* プレビューモード切り替えボタン */}
+                <button onClick={() => setIsPreviewMode(true)} className="p-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 flex items-center gap-1 text-xs font-bold">
+                  <Eye size={18} /> <span className="hidden sm:inline">スクショ用</span>
+                </button>
+
+                <button 
+                  onClick={downloadImage} 
+                  disabled={isSaving}
+                  className={`flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm ${isSaving ? 'opacity-50' : ''}`}
+                >
+                  <Download size={18} /> {isSaving ? '...' : '保存'}
+                </button>
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <button onClick={() => setIsSettingsOpen(!isSettingsOpen)} className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${isSettingsOpen ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}>
-                <Settings size={20} />
-              </button>
-              <button onClick={downloadImage} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm">
-                <Download size={18} /> 保存
-              </button>
-            </div>
+            {/* --- 設定エリア --- */}
+            {isSettingsOpen && (
+              <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm animate-in slide-in-from-top-2">
+                <div className="p-3 bg-gray-50 rounded border">
+                  <label className="block font-bold mb-2 text-gray-600 flex items-center gap-1"><UserPlus size={14}/> キャスト登録</label>
+                  <div className="flex gap-2 mb-1">
+                    <input type="text" value={newCastNameInput} onChange={(e) => setNewCastNameInput(e.target.value)} className="border p-2 rounded flex-1 outline-none" placeholder="名前" />
+                    <button onClick={addNewCast} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 font-bold text-xs whitespace-nowrap">追加</button>
+                  </div>
+                  <div className="text-xs text-gray-400">{registeredCasts.length}名登録中</div>
+                </div>
+                <div className="p-3 bg-gray-50 rounded border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ画像</label>
+                    <div className="flex gap-2 items-center">
+                      {/* 【追加】白黒反転スイッチ */}
+                      <button 
+                         onClick={() => setIsLogoWhite(!isLogoWhite)}
+                         className={`flex items-center gap-1 px-2 py-1 rounded text-xs border font-bold ${isLogoWhite ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-800 border-gray-300'}`}
+                      >
+                         {isLogoWhite ? <ToggleRight size={16}/> : <ToggleLeft size={16}/>}
+                         {isLogoWhite ? '白ロゴ' : '黒ロゴ'}
+                      </button>
+                      <button onClick={() => fileInputRefLogo.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">変更</button>
+                      <input type="file" accept="image/*" ref={fileInputRefLogo} onChange={(e) => handleImageUpload(e, setLogoImage)} className="hidden" />
+                    </div>
+                  </div>
+                  <div className="border-t pt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> 背景画像</label>
+                      <div className="flex gap-2">
+                          {backgroundImage && <button onClick={() => setBackgroundImage(null)} className="text-xs text-red-500 underline">削除</button>}
+                          <button onClick={() => fileInputRefBg.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">選択</button>
+                          <input type="file" accept="image/*" ref={fileInputRefBg} onChange={(e) => handleImageUpload(e, setBackgroundImage)} className="hidden" />
+                      </div>
+                    </div>
+                    {backgroundImage && (
+                      <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
+                        <div className="flex items-center gap-2">
+                           <span className="text-xs font-bold w-12 text-right">Zoom</span>
+                           <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <span className="text-xs font-bold w-12 text-right">横位置</span>
+                           <input type="range" min="0" max="100" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <span className="text-xs font-bold w-12 text-right">縦位置</span>
+                           <input type="range" min="0" max="100" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 【追加】余白調整スライダー */}
+                  <div className="border-t pt-2">
+                    <div className="flex items-center gap-2">
+                       <MoveVertical size={14} className="text-gray-600"/>
+                       <span className="text-xs font-bold w-20">隙間サイズ</span>
+                       <input 
+                         type="range" min="0" max="500" step="10" // 【修正】最大値を500に増加
+                         value={headerGap} 
+                         onChange={(e) => setHeaderGap(Number(e.target.value))} 
+                         className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" 
+                       />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t mt-2">
+                     <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> 全データリセット</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* --- 設定エリア --- */}
-          {isSettingsOpen && (
-            <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm animate-in slide-in-from-top-2">
-              <div className="p-3 bg-gray-50 rounded border">
-                <label className="block font-bold mb-2 text-gray-600 flex items-center gap-1"><UserPlus size={14}/> キャスト登録</label>
-                <div className="flex gap-2 mb-1">
-                  <input type="text" value={newCastNameInput} onChange={(e) => setNewCastNameInput(e.target.value)} className="border p-2 rounded flex-1 outline-none" placeholder="名前" />
-                  <button onClick={addNewCast} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 font-bold text-xs whitespace-nowrap">追加</button>
-                </div>
-                <div className="text-xs text-gray-400">{registeredCasts.length}名登録中</div>
-              </div>
-              <div className="p-3 bg-gray-50 rounded border space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ画像</label>
-                  <div className="flex gap-2">
-                    <button onClick={() => fileInputRefLogo.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">変更</button>
-                    <input type="file" accept="image/*" ref={fileInputRefLogo} onChange={(e) => handleImageUpload(e, setLogoImage)} className="hidden" />
-                  </div>
-                </div>
-                <div className="border-t pt-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> 背景画像</label>
-                    <div className="flex gap-2">
-                        {backgroundImage && <button onClick={() => setBackgroundImage(null)} className="text-xs text-red-500 underline">削除</button>}
-                        <button onClick={() => fileInputRefBg.current?.click()} className="border bg-white px-2 py-1 rounded text-xs flex items-center gap-1">選択</button>
-                        <input type="file" accept="image/*" ref={fileInputRefBg} onChange={(e) => handleImageUpload(e, setBackgroundImage)} className="hidden" />
-                    </div>
-                  </div>
-                  {backgroundImage && (
-                    <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
-                      <div className="flex items-center gap-2">
-                         <span className="text-xs font-bold w-12 text-right">Zoom</span>
-                         <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                         <span className="text-xs font-bold w-12 text-right">横位置</span>
-                         <input type="range" min="0" max="100" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                         <span className="text-xs font-bold w-12 text-right">縦位置</span>
-                         <input type="range" min="0" max="100" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 【修正点2】余白調整スライダー */}
-                <div className="border-t pt-2">
-                  <div className="flex items-center gap-2">
-                     <MoveVertical size={14} className="text-gray-600"/>
-                     <span className="text-xs font-bold w-20">隙間サイズ</span>
-                     <input 
-                       type="range" min="0" max="300" step="10" 
-                       value={headerGap} 
-                       onChange={(e) => setHeaderGap(Number(e.target.value))} 
-                       className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" 
-                     />
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t mt-2">
-                   <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> 全データリセット</button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
-      </div>
+      )}
+
+      {/* --- プレビューモード終了ボタン (オーバーレイ) --- */}
+      {isPreviewMode && (
+        <button 
+          onClick={() => setIsPreviewMode(false)}
+          className="fixed top-4 right-4 z-50 bg-white/90 text-black px-4 py-2 rounded-full font-bold shadow-lg text-sm border-2 border-black"
+        >
+          ✕ 閉じる
+        </button>
+      )}
 
       {/* --- カレンダー描画エリア --- */}
-      <div className="scale-container" ref={calendarWrapperRef}>
+      <div className={`scale-container ${isPreviewMode ? 'items-center min-h-screen py-10' : ''}`} ref={calendarWrapperRef}>
         <div 
            style={{ 
              transform: `scale(${previewScale})`, 
              transformOrigin: 'top center',
              width: '1080px',
              height: 'auto',
-             marginBottom: `-${(1080 * (1 - previewScale))}px`
+             marginBottom: isPreviewMode ? '0' : `-${(1080 * (1 - previewScale))}px`
            }}
+           className="saving-target"
         >
-          <div className="max-w-[1080px] mx-auto overflow-hidden shadow-2xl rounded-lg ring-1 ring-gray-200">
-            <div 
-              ref={calendarRef} 
-              className="bg-white min-w-[1080px] relative bg-no-repeat overflow-hidden min-h-[1350px]"
-              style={{ 
-                  backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
-                  backgroundSize: `${bgZoom}%`,
-                  backgroundPosition: `${bgX}% ${bgY}%`
-              }}
-            >
-              
-              <div className="relative z-10 pt-4 pb-6 px-8">
-                {/* ヘッダー・ロゴ */}
-                <div className="text-center">
-                  
-                  <div className="flex justify-center -mb-2">
-                    <div className="w-full h-[280px] relative flex items-center justify-center"> 
-                      <img 
-                        src={logoImage || '/logo.png'} 
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        alt="店舗ロゴ" 
-                        className="w-full h-full object-contain drop-shadow-xl" 
-                      />
-                      {!logoImage && (
-                          <div className="absolute inset-0 bg-gray-100/50 rounded-lg border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-500 font-bold backdrop-blur-sm -z-10">
-                          No Logo
-                          </div>
-                      )}
-                    </div>
+          <div 
+            ref={calendarRef} 
+            className="bg-white min-w-[1080px] relative bg-no-repeat overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
+            style={{ 
+                backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
+                backgroundSize: `${bgZoom}%`,
+                backgroundPosition: `${bgX}% ${bgY}%`
+            }}
+          >
+            
+            <div className="relative z-10 pt-4 pb-6 px-8">
+              {/* ヘッダー・ロゴ */}
+              <div className="text-center">
+                
+                <div className="flex justify-center mb-0">
+                  <div className="w-full h-[280px] relative flex items-center justify-center"> 
+                    <img 
+                      src={logoImage || '/logo.png'} 
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      alt="店舗ロゴ" 
+                      // 【追加】白黒反転フィルター適用
+                      className={`w-full h-full object-contain drop-shadow-xl transition-all ${isLogoWhite ? 'brightness-0 invert' : ''}`} 
+                    />
+                    {!logoImage && (
+                        <div className="absolute inset-0 bg-gray-100/50 rounded-lg border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-500 font-bold backdrop-blur-sm -z-10">
+                        No Logo
+                        </div>
+                    )}
                   </div>
-
-                  <h1 className="text-4xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900 relative z-20">
-                    {month}月{isSecondHalf ? '後半' : '前半'}シフト
-                  </h1>
                 </div>
 
-                {/* 【修正点2】余白（スペーサー） */}
+                {/* 【追加】このスペーサーでロゴとタイトルの距離を調整 */}
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* カレンダーグリッド */}
-                <div className="border-4 border-gray-900 bg-white/90 shadow-lg rounded-sm overflow-hidden">
-                  <div className="grid grid-cols-7 bg-gray-800 text-white font-bold text-center border-b-4 border-gray-900">
-                    {['日', '月', '火', '水', '木', '金', '土'].map((d, i) => (
-                      <div key={d} className={`py-3 text-lg border-r border-gray-600 last:border-r-0 ${i===0 ? 'text-pink-300' : ''} ${i===6 ? 'text-blue-300' : ''}`}>{d}</div>
-                    ))}
-                  </div>
+                <h1 className="text-4xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900 relative z-20">
+                  {month}月{isSecondHalf ? '後半' : '前半'}シフト
+                </h1>
+              </div>
 
-                  <div className="grid grid-cols-7 bg-white/40">
-                    {days.map((day, i) => {
-                      const weekIndex = i % 7;
-                      const isSun = weekIndex === 0;
-                      const isSat = weekIndex === 6;
-                      const eventTitle = day ? eventMap[day] : undefined;
-                      const isEvent = !!eventTitle;
-                      
-                      let bgClass = 'bg-white/95'; 
-                      if (isSun) bgClass = 'bg-pink-50/95';
-                      if (isSat) bgClass = 'bg-blue-50/95';
-                      if (isEvent) bgClass = isSun ? 'bg-pink-100/95' : (isSat ? 'bg-blue-100/95' : 'bg-yellow-50/95');
+              {/* カレンダーグリッド */}
+              <div className="border-4 border-gray-900 bg-white/90 shadow-lg rounded-sm overflow-hidden mt-4">
+                <div className="grid grid-cols-7 bg-gray-800 text-white font-bold text-center border-b-4 border-gray-900">
+                  {['日', '月', '火', '水', '木', '金', '土'].map((d, i) => (
+                    <div key={d} className={`py-3 text-lg border-r border-gray-600 last:border-r-0 ${i===0 ? 'text-pink-300' : ''} ${i===6 ? 'text-blue-300' : ''}`}>{d}</div>
+                  ))}
+                </div>
 
-                      return (
-                        <div 
-                          key={i} 
-                          className={`min-h-[140px] border-b-2 border-r-2 border-gray-300 p-1.5 relative group transition-colors ${bgClass} ${day ? 'cursor-pointer hover:bg-yellow-100' : ''}`}
-                          onClick={() => day && openModal(day)}
-                        >
-                          {day && (
-                            <>
-                              <div className="flex justify-between items-start mb-1">
-                                <div className="flex-1">
-                                  {/* 【修正点3】イベントタイトルの表示 */}
-                                  {isEvent && (
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <Star size={16} className="text-yellow-500 fill-yellow-500" />
-                                      <span className="text-[10px] font-black text-yellow-600 bg-yellow-100 px-1 rounded truncate max-w-[80px] border border-yellow-300">
-                                        {eventTitle}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className={`text-2xl font-black ${isSun?'text-pink-600':(isSat?'text-blue-600':'text-gray-700')}`}>
-                                  {day}
-                                </div>
-                              </div>
-                              
-                              <div className="flex flex-col gap-1.5">
-                                {shifts.filter(s => s.day === day).map(shift => (
-                                  <div key={shift.id} className="flex items-stretch text-sm shadow-md relative group/chip transform transition-transform hover:scale-[1.02]">
-                                    <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-8 font-bold flex items-center justify-center text-xs rounded-l border-y border-l border-black/10`}>
-                                      {SHIFT_STYLES[shift.type].label}
+                <div className="grid grid-cols-7 bg-white/40">
+                  {days.map((day, i) => {
+                    const weekIndex = i % 7;
+                    const isSun = weekIndex === 0;
+                    const isSat = weekIndex === 6;
+                    const eventTitle = day ? eventMap[day] : undefined;
+                    const isEvent = !!eventTitle;
+                    
+                    let bgClass = 'bg-white/95'; 
+                    if (isSun) bgClass = 'bg-pink-50/95';
+                    if (isSat) bgClass = 'bg-blue-50/95';
+                    if (isEvent) bgClass = isSun ? 'bg-pink-100/95' : (isSat ? 'bg-blue-100/95' : 'bg-yellow-50/95');
+
+                    return (
+                      <div 
+                        key={i} 
+                        className={`min-h-[140px] border-b-2 border-r-2 border-gray-300 p-1.5 relative group transition-colors ${bgClass} ${day ? 'cursor-pointer hover:bg-yellow-100' : ''}`}
+                        onClick={() => day && openModal(day)}
+                      >
+                        {day && (
+                          <>
+                            <div className="flex justify-between items-start mb-1">
+                              <div className="flex-1">
+                                {isEvent && (
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <Star size={16} className="text-yellow-500 fill-yellow-500" />
+                                    <span className="text-[10px] font-black text-yellow-600 bg-yellow-100 px-1 rounded truncate max-w-[80px] border border-yellow-300">
+                                      {eventTitle}
                                     </span>
-                                    <span className={`bg-gray-900 text-white font-bold px-2 py-1 flex-1 text-center truncate border-l border-white/20 rounded-r border-y border-r border-black/10 flex items-center justify-center gap-1 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
-                                      {shift.isBD && <Cake size={14} className="text-yellow-400 fill-yellow-400 animate-pulse"/>}
-                                      {shift.castName}
-                                    </span>
-                                    <button 
-                                      onClick={(e) => deleteShift(shift.id, e)}
-                                      className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover/chip:opacity-100 transition-opacity no-print z-20 shadow-lg"
-                                    >
-                                      <Trash2 size={10} />
-                                    </button>
                                   </div>
-                                ))}
+                                )}
                               </div>
-                              <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 text-blue-500 no-print bg-white/80 rounded-full p-1">
-                                <Plus size={24} />
+                              <div className={`text-2xl font-black ${isSun?'text-pink-600':(isSat?'text-blue-600':'text-gray-700')}`}>
+                                {day}
                               </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                            </div>
+                            
+                            <div className="flex flex-col gap-1.5">
+                              {shifts.filter(s => s.day === day).map(shift => (
+                                <div key={shift.id} className="flex items-stretch text-sm shadow-md relative group/chip transform transition-transform hover:scale-[1.02]">
+                                  <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-8 font-bold flex items-center justify-center text-xs rounded-l border-y border-l border-black/10`}>
+                                    {SHIFT_STYLES[shift.type].label}
+                                  </span>
+                                  <span className={`bg-gray-900 text-white font-bold px-2 py-1 flex-1 text-center truncate border-l border-white/20 rounded-r border-y border-r border-black/10 flex items-center justify-center gap-1 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
+                                    {shift.isBD && <Cake size={14} className="text-yellow-400 fill-yellow-400 animate-pulse"/>}
+                                    {shift.castName}
+                                  </span>
+                                  <button 
+                                    onClick={(e) => deleteShift(shift.id, e)}
+                                    className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover/chip:opacity-100 transition-opacity no-print z-20 shadow-lg"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 text-blue-500 no-print bg-white/80 rounded-full p-1">
+                              <Plus size={24} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="text-right mt-4 text-gray-800 font-bold text-sm bg-white/60 inline-block float-right px-2 py-1 rounded backdrop-blur-sm">
-                   Created by Cast Calendar
-                </div>
+              </div>
+              <div className="text-right mt-4 text-gray-800 font-bold text-sm bg-white/60 inline-block float-right px-2 py-1 rounded backdrop-blur-sm">
+                 Created by Cast Calendar
               </div>
             </div>
           </div>
@@ -581,7 +616,6 @@ export default function CalendarApp() {
               </h3>
             </div>
             
-            {/* 【修正点3】イベントタイトル入力 */}
             <div className={`mb-4 p-3 rounded-xl border transition-all ${isEventInput ? 'bg-yellow-50 border-yellow-300 shadow-sm' : 'bg-gray-50 border-transparent'}`}>
               <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700 mb-2">
                 <input type="checkbox" checked={isEventInput} onChange={(e) => setIsEventInput(e.target.checked)} className="w-5 h-5 accent-yellow-500 rounded" />
