@@ -2,8 +2,7 @@
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
 import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera } from 'lucide-react';
-// toJpegのみを使用（安定しているため）
-import { toJpeg } from 'html-to-image';
+import { toBlob, toJpeg } from 'html-to-image';
 
 // --- 型定義 ---
 type ShiftType = '早' | '遅' | 'OL' | 'その他';
@@ -56,8 +55,8 @@ export default function CalendarApp() {
   const [isLogoWhite, setIsLogoWhite] = useState(false);
   
   const [bgZoom, setBgZoom] = useState(100);
-  const [bgX, setBgX] = useState(0); // 初期値を0に変更
-  const [bgY, setBgY] = useState(0); // 初期値を0に変更
+  const [bgX, setBgX] = useState(0);
+  const [bgY, setBgY] = useState(0);
   const [headerGap, setHeaderGap] = useState(20);
 
   const [registeredCasts, setRegisteredCasts] = useState<string[]>([
@@ -122,7 +121,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v17'); 
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v18'); 
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -161,7 +160,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v17', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v18', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -227,7 +226,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v17');
+      localStorage.removeItem('girlsbar_calendar_data_v18');
       window.location.reload();
     }
   };
@@ -287,16 +286,36 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存（シェア） ---
+  // --- ヘルパー：ウォームアップ（描画遅延対策） ---
+  const warmUpEngine = async () => {
+    if (!calendarRef.current) return;
+    try {
+        // 見えない状態で一度実行してキャッシュさせる
+        await toJpeg(calendarRef.current, {
+            quality: 0.1,
+            width: 100,
+            height: 100,
+            style: { opacity: '0' }
+        });
+    } catch (e) {
+        console.log("Warmup skipped");
+    }
+  };
+
+  // --- 自動保存（シェア/ダウンロード） ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // 【修正】toJpegを使ってデータを作成し、それをFileに変換するフローに変更
-      // toBlobよりもtoJpegの方が成功率が高いという実績に基づきます
-      const dataUrl = await toJpeg(calendarRef.current, {
+      // 1. ウォームアップ（これで背景白飛びを防ぐ）
+      await warmUpEngine();
+      // 少し待つ
+      await new Promise(r => setTimeout(r, 100));
+
+      // 2. 本番生成
+      const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
         height: calendarRef.current.scrollHeight,
@@ -304,9 +323,8 @@ export default function CalendarApp() {
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
-      // DataURL -> Blob -> File 変換
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
+      if (!blob) throw new Error('Blob generation failed');
+
       const file = new File([blob], `shift_${year}_${month}.jpg`, { type: 'image/jpeg' });
       
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -316,16 +334,16 @@ export default function CalendarApp() {
           text: `${year}年${month}月のシフト表`
         });
       } else {
-        // PC等の場合: ダウンロード
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`;
-        link.href = dataUrl;
+        link.href = url;
         link.click();
       }
     } catch (err) {
       console.error('Save failed', err);
       if ((err as Error).name !== 'AbortError') {
-        alert('保存に失敗しました。隣の「長押し保存」ボタンを試してください。');
+        alert('保存に失敗しました。「長押し保存」を試してください。');
       }
     } finally {
       setIsGenerating(false);
@@ -339,6 +357,10 @@ export default function CalendarApp() {
     window.scrollTo(0, 0);
 
     try {
+      // ここでもウォームアップを入れる
+      await warmUpEngine();
+      await new Promise(r => setTimeout(r, 100));
+
       const dataUrl = await toJpeg(calendarRef.current, {
         quality: 0.95,
         width: 1080,
@@ -435,12 +457,10 @@ export default function CalendarApp() {
                 <Settings size={20} />
               </button>
               
-              {/* 長押し保存ボタン (手動生成) */}
               <button onClick={handleManualSave} disabled={isGenerating} className="p-2 border border-gray-300 rounded hover:bg-gray-100 text-gray-600 flex items-center gap-1 text-xs font-bold whitespace-nowrap">
                 <Smartphone size={18} /> <span className="hidden sm:inline">長押し保存</span>
               </button>
 
-              {/* 自動保存ボタン (シェア) */}
               <button 
                 onClick={handleAutoSave} 
                 disabled={isGenerating}
@@ -454,7 +474,6 @@ export default function CalendarApp() {
           {isSettingsOpen && (
             <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm animate-in slide-in-from-top-2">
               <div className="p-3 bg-gray-50 rounded border">
-                {/* データ管理 */}
                 <div className="flex items-center justify-between mb-4 border-b pb-2">
                   <span className="font-bold text-gray-600 flex items-center gap-1"><Settings size={14}/> データ管理</span>
                   <div className="flex gap-2">
@@ -516,7 +535,6 @@ export default function CalendarApp() {
                       </div>
                       <div className="flex items-center gap-2">
                          <span className="text-xs font-bold w-12 text-right">横</span>
-                         {/* 【修正】スライドを%ではなくピクセル移動(translate)として使うため範囲を大きく */}
                          <input type="range" min="-500" max="500" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                       </div>
                       <div className="flex items-center gap-2">
@@ -563,17 +581,17 @@ export default function CalendarApp() {
             ref={calendarRef} 
             className="relative min-w-[1080px] overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
           >
+            
             {/* レイヤー1: ベース白背景 */}
             <div className="absolute inset-0 bg-white z-0"></div>
 
-            {/* レイヤー2: 背景画像（transformで動かす） */}
+            {/* レイヤー2: 背景画像（スライダーで動く） */}
             {backgroundImage && (
               <div className="absolute inset-0 overflow-hidden z-0">
                 <img 
                   src={backgroundImage} 
                   className="w-full h-full object-cover origin-center"
                   style={{
-                    // translateで動かす方式に変更（直感的に動く）
                     transform: `translate(${bgX}px, ${bgY}px) scale(${bgZoom / 100})`
                   }}
                   alt=""
