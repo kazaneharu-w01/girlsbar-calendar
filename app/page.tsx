@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
+// 【修正】不足していたアイコン(Trash2, Plus, Saveなど)を追加しました
 import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Camera } from 'lucide-react';
-// 【変更点】軽量ライブラリ html-to-image を使用
 import { toJpeg } from 'html-to-image';
 
 // --- 型定義 ---
@@ -65,7 +65,6 @@ export default function CalendarApp() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  // スクショモードでのボタン表示フラグ
   const [showPreviewControls, setShowPreviewControls] = useState(true);
 
   const [previewScale, setPreviewScale] = useState(1);
@@ -75,6 +74,7 @@ export default function CalendarApp() {
   const fileInputRefBg = useRef<HTMLInputElement>(null);
   const fileInputRefLogo = useRef<HTMLInputElement>(null);
 
+  // 画像圧縮関数
   const compressImage = (file: File, maxWidth: number = 1024): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -104,7 +104,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v7'); // Version Up
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v8'); // Version Up
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -144,7 +144,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v7', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v8', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -204,7 +204,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v7');
+      localStorage.removeItem('girlsbar_calendar_data_v8');
       window.location.reload();
     }
   };
@@ -220,31 +220,42 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 新しい画像生成ロジック (html-to-image) ---
-  const generateImage = async () => {
+  // --- 画像保存ロジック (Direct Download) ---
+  const handleSaveImage = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     
-    // スクロール位置リセット（ズレ防止）
-    window.scrollTo(0,0);
+    window.scrollTo(0,0); // ズレ防止のためスクロールリセット
 
     try {
-      // 変換実行
-      // pixelRatio: 1 にすることで、スマホの高解像度ディスプレイでも
-      // 強制的に等倍（軽い状態）でレンダリングさせます。これがクラッシュ防止の鍵です。
+      // 1. 画像データを生成
       const dataUrl = await toJpeg(calendarRef.current, {
         quality: 0.9,
-        pixelRatio: 1, 
+        pixelRatio: 1, // スマホの拡大率を無視して等倍で作成
         backgroundColor: '#ffffff',
-        width: 1080, // 幅固定
-        style: { transform: 'none' } // 変形リセット
+        // 【重要】サイズ強制指定と変形解除で「ズレ」を防ぐ
+        width: 1080, 
+        height: calendarRef.current.scrollHeight, 
+        style: { 
+          transform: 'none', 
+          transformOrigin: 'top left',
+          width: '1080px',
+          height: 'auto'
+        } 
       });
 
+      // 2. 自動ダウンロードを試みる
+      const link = document.createElement('a');
+      link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`;
+      link.href = dataUrl;
+      link.click();
+
+      // 3. 念のためプレビューモーダルにもセット（ダウンロード失敗時の保険）
       setGeneratedImage(dataUrl);
 
     } catch (err) {
-      console.error('Generation failed', err);
-      alert('画像作成に失敗しました。スクショモードをご利用ください。');
+      console.error('Save failed', err);
+      alert('保存に失敗しました。');
     } finally {
       setIsGenerating(false);
     }
@@ -270,26 +281,25 @@ export default function CalendarApp() {
 
   return (
     <div className={`min-h-screen bg-gray-100 font-sans text-gray-800 ${isPreviewMode ? 'bg-black' : 'pb-20'}`}>
-      {/* プレビュー画面でのタップ判定（ボタン表示切り替え） */}
+      
+      {/* プレビュー画面でのタップ判定 */}
       {isPreviewMode && (
-        <div 
-          className="fixed inset-0 z-40" 
-          onClick={() => setShowPreviewControls(!showPreviewControls)}
-        ></div>
+        <div className="fixed inset-0 z-40" onClick={() => setShowPreviewControls(!showPreviewControls)}></div>
       )}
 
-      {/* --- 画像生成後の「長押し保存」画面 (モーダル) --- */}
+      {/* --- 生成後の画像確認・手動保存モーダル (自動保存が失敗した場合用) --- */}
       {generatedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="text-white text-center mb-4 font-bold text-lg animate-pulse">
-            画像を長押しして「写真に保存」
+          <div className="text-white text-center mb-2 font-bold text-sm">
+             画像が保存されました。<br/>もし保存されていない場合は、画像を長押しして保存してください。
           </div>
           <div className="relative w-full max-w-sm overflow-hidden rounded-lg shadow-2xl ring-2 ring-white/20">
+             {/* ズレ防止のため object-contain を適用 */}
              <img src={generatedImage} alt="Generated Calendar" className="w-full h-auto object-contain" />
           </div>
           <button 
             onClick={() => setGeneratedImage(null)}
-            className="mt-8 bg-white text-black px-8 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-gray-200 transition-colors"
+            className="mt-6 bg-white text-black px-8 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:bg-gray-200 transition-colors"
           >
             <Check size={20} /> 閉じる
           </button>
@@ -336,11 +346,11 @@ export default function CalendarApp() {
                 </button>
 
                 <button 
-                  onClick={generateImage} 
+                  onClick={handleSaveImage} 
                   disabled={isGenerating}
                   className={`flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 font-bold shadow-sm text-sm ${isGenerating ? 'opacity-50' : ''}`}
                 >
-                  <Download size={18} /> {isGenerating ? '作成中...' : '画像作成'}
+                  <Download size={18} /> {isGenerating ? '保存中...' : '画像保存'}
                 </button>
               </div>
             </div>
@@ -412,7 +422,7 @@ export default function CalendarApp() {
         </div>
       )}
 
-      {/* --- スクショモード閉じるボタン（タップで表示/非表示） --- */}
+      {/* --- スクショモード閉じるボタン --- */}
       {isPreviewMode && showPreviewControls && (
         <div className="fixed bottom-10 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center gap-2 no-print w-full pointer-events-none">
           <div className="bg-black/50 text-white text-xs px-3 py-1 rounded-full mb-2">画面をタップしてボタンを隠す</div>
