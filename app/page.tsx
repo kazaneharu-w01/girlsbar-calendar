@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Plus, Trash2, Star, Image as ImageIcon, UserPlus, Settings, Save, RotateCcw, AlertCircle } from 'lucide-react';
+import { Download, Plus, Trash2, Star, Image as ImageIcon, UserPlus, Settings, Save, RotateCcw, AlertCircle, Cake } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 // --- 型定義 ---
@@ -11,6 +11,8 @@ type Shift = {
   day: number;
   castName: string;
   type: ShiftType;
+  // 【追加点3】BDフラグ
+  isBD?: boolean;
 };
 
 // --- 設定: シフトの見た目 ---
@@ -24,9 +26,8 @@ const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string 
 export default function CalendarApp() {
   // --- 状態管理 ---
   const [isLoaded, setIsLoaded] = useState(false);
-  // 【修正点3】デフォルト年を2026に変更
   const [year, setYear] = useState(2026);
-  const [month, setMonth] = useState(1); // デフォルト月
+  const [month, setMonth] = useState(1);
   const [isSecondHalf, setIsSecondHalf] = useState(true);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [eventDays, setEventDays] = useState<number[]>([]);
@@ -50,9 +51,10 @@ export default function CalendarApp() {
   const [inputName, setInputName] = useState('');
   const [inputType, setInputType] = useState<ShiftType>('早');
   const [isEventInput, setIsEventInput] = useState(false);
+  // 【追加点3】モーダル用BD入力状態
+  const [isBDInput, setIsBDInput] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // 【修正点】画面フィット用のスケール計算
   const [previewScale, setPreviewScale] = useState(1);
 
   const calendarRef = useRef<HTMLDivElement>(null);
@@ -115,17 +117,13 @@ export default function CalendarApp() {
   useEffect(() => {
     const handleResize = () => {
       if (calendarWrapperRef.current) {
-        // カレンダーの元サイズは1080px。画面幅に合わせて縮小する。
-        // 少し余白を持たせるため画面幅の95%をターゲットにする
         const screenWidth = window.innerWidth;
-        const targetWidth = Math.min(screenWidth, 1080); // PCでも最大1080
         // モバイル等のパディングを考慮して計算
         const scale = (screenWidth < 1100) ? (screenWidth - 32) / 1080 : 1; 
         setPreviewScale(Math.max(scale, 0.2)); // 最小でも0.2倍
       }
     };
-    
-    handleResize(); // 初回実行
+    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -133,12 +131,10 @@ export default function CalendarApp() {
   // --- データ保存 ---
   useEffect(() => {
     if (!isLoaded) return;
-    
     const dataToSave = {
       shifts, eventDays, registeredCasts, backgroundImage, logoImage,
       year, month, bgZoom, bgX, bgY
     };
-
     try {
       localStorage.setItem('girlsbar_calendar_data_v2', JSON.stringify(dataToSave));
       setSaveError(null);
@@ -171,15 +167,21 @@ export default function CalendarApp() {
         day: selectedDay,
         castName: inputName,
         type: inputType,
+        // 【追加点3】BD状態を保存
+        isBD: isBDInput,
       };
       setShifts([...shifts, newShift]);
     }
+    // イベントデー設定はシフト入力とは独立して保存
     if (isEventInput) {
       if (!eventDays.includes(selectedDay)) setEventDays([...eventDays, selectedDay]);
     } else {
       setEventDays(eventDays.filter(d => d !== selectedDay));
     }
+    
+    // リセット
     setInputName('');
+    setIsBDInput(false);
     setIsModalOpen(false);
   };
 
@@ -206,38 +208,50 @@ export default function CalendarApp() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const maxWidth = e.target === fileInputRefLogo.current ? 500 : 1280;
+        const maxWidth = e.target === fileInputRefLogo.current ? 800 : 1280; // ロゴサイズ上限アップ
         const compressedDataUrl = await compressImage(file, maxWidth);
         setImage(compressedDataUrl);
       } catch (err) { alert('画像の読み込みに失敗しました'); }
     }
   };
 
+  // 【修正点2】画像保存ロジックの修正
   const downloadImage = async () => {
     if (!calendarRef.current) return;
     try {
       calendarRef.current.classList.add('generating-image');
+      
+      // html2canvasのオプションを調整
       const canvas = await html2canvas(calendarRef.current, {
-        scale: 2, useCORS: true, backgroundColor: null,
+        scale: 1, // 【修正】スマホでの安定性のため標準解像度に変更 (2 -> 1)
+        useCORS: true, // 外部画像の読み込み許可
+        allowTaint: true,
+        backgroundColor: null,
+        logging: false,
       });
+      
       calendarRef.current.classList.remove('generating-image');
       const link = document.createElement('a');
       link.download = `${year}年${month}月${isSecondHalf ? '後半' : '前半'}シフト.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = canvas.toDataURL('image/png', 0.9); // 少し圧縮して軽量化
       link.click();
-    } catch (err) { alert('画像の保存に失敗しました。'); }
+    } catch (err) {
+      console.error('画像生成エラー:', err);
+      alert('画像の保存に失敗しました。メモリ不足の可能性があります。');
+      calendarRef.current.classList.remove('generating-image');
+    }
   };
 
   const openModal = (day: number) => {
     setSelectedDay(day);
     setInputName('');
     setIsEventInput(eventDays.includes(day));
+    setIsBDInput(false); // BDリセット
     setIsModalOpen(true);
   };
 
   const days = getDaysArray();
-  // プルダウン用の配列生成
-  const yearsList = Array.from({ length: 6 }, (_, i) => 2025 + i); // 2025-2030
+  const yearsList = Array.from({ length: 6 }, (_, i) => 2025 + i);
   const monthsList = Array.from({ length: 12 }, (_, i) => i + 1);
 
   if (!isLoaded) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -246,7 +260,6 @@ export default function CalendarApp() {
     <div className="min-h-screen bg-gray-100 pb-20 font-sans text-gray-800">
       <style jsx global>{`
         .generating-image .no-print { display: none !important; }
-        /* スケール調整用のコンテナ */
         .scale-container {
           width: 100%;
           overflow: hidden;
@@ -262,12 +275,11 @@ export default function CalendarApp() {
         </div>
       )}
 
-      {/* --- 操作パネル (スマホ対応レイアウト) --- */}
+      {/* --- 操作パネル --- */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 py-3 shadow-sm mb-4">
         <div className="max-w-4xl mx-auto flex flex-col gap-3">
           
           <div className="flex flex-wrap items-center justify-between gap-3">
-            {/* 年月選択（プルダウン化） */}
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1 border border-gray-300 px-2 py-1 rounded bg-white shadow-sm">
                  <select 
@@ -278,9 +290,7 @@ export default function CalendarApp() {
                    {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
                  </select>
                  <span className="text-xs font-bold text-gray-500">年</span>
-                 
                  <div className="w-px h-4 bg-gray-300 mx-1"></div>
-
                  <select 
                    value={month} 
                    onChange={(e) => setMonth(Number(e.target.value))} 
@@ -290,7 +300,6 @@ export default function CalendarApp() {
                  </select>
                  <span className="text-xs font-bold text-gray-500">月</span>
               </div>
-              
               <div className="flex bg-gray-100 rounded p-1 text-xs border border-gray-200">
                 <button onClick={() => setIsSecondHalf(false)} className={`px-3 py-1.5 rounded transition-all ${!isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>前半</button>
                 <button onClick={() => setIsSecondHalf(true)} className={`px-3 py-1.5 rounded transition-all ${isSecondHalf ? 'bg-white shadow text-blue-600 font-bold' : 'text-gray-500'}`}>後半</button>
@@ -318,7 +327,6 @@ export default function CalendarApp() {
                 </div>
                 <div className="text-xs text-gray-400">{registeredCasts.length}名登録中</div>
               </div>
-              
               <div className="p-3 bg-gray-50 rounded border space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> ロゴ画像</label>
@@ -327,7 +335,6 @@ export default function CalendarApp() {
                     <input type="file" accept="image/*" ref={fileInputRefLogo} onChange={(e) => handleImageUpload(e, setLogoImage)} className="hidden" />
                   </div>
                 </div>
-
                 <div className="border-t pt-2">
                   <div className="flex items-center justify-between mb-2">
                     <label className="font-bold text-gray-600 flex items-center gap-1"><ImageIcon size={14}/> 背景画像</label>
@@ -337,7 +344,6 @@ export default function CalendarApp() {
                         <input type="file" accept="image/*" ref={fileInputRefBg} onChange={(e) => handleImageUpload(e, setBackgroundImage)} className="hidden" />
                     </div>
                   </div>
-                  
                   {backgroundImage && (
                     <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
                       <div className="flex items-center gap-2">
@@ -355,7 +361,6 @@ export default function CalendarApp() {
                     </div>
                   )}
                 </div>
-                
                 <div className="pt-2 border-t mt-2">
                    <button onClick={resetAllData} className="flex items-center gap-1 text-red-500 text-xs hover:underline"><RotateCcw size={12}/> 全データリセット</button>
                 </div>
@@ -365,16 +370,15 @@ export default function CalendarApp() {
         </div>
       </div>
 
-      {/* --- カレンダー描画エリア (自動スケール縮小) --- */}
+      {/* --- カレンダー描画エリア --- */}
       <div className="scale-container" ref={calendarWrapperRef}>
-        {/* このdivをスケールさせる */}
         <div 
            style={{ 
              transform: `scale(${previewScale})`, 
              transformOrigin: 'top center',
-             width: '1080px', // ここは固定！画像生成のため
-             height: 'auto', // 高さはなりゆき
-             marginBottom: `-${(1080 * (1 - previewScale))}px` // 余白調整（スケール縮小分の下の隙間を埋める）
+             width: '1080px',
+             height: 'auto',
+             marginBottom: `-${(1080 * (1 - previewScale))}px`
            }}
         >
           <div className="max-w-[1080px] mx-auto overflow-hidden shadow-2xl rounded-lg ring-1 ring-gray-200">
@@ -388,25 +392,25 @@ export default function CalendarApp() {
               }}
             >
               
-              {/* 【修正点4】余白を調整 (pt-10 -> pt-6, mb-6 -> mb-2) */}
-              <div className="relative z-10 pt-6 pb-6 px-8">
+              <div className="relative z-10 pt-8 pb-6 px-8">
                 {/* ヘッダー・ロゴ */}
-                <div className="text-center mb-2">
-                  <h1 className="text-5xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900">
+                <div className="text-center mb-4">
+                  <h1 className="text-4xl font-black tracking-wider mb-4 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900">
                     {month}月{isSecondHalf ? '後半' : '前半'}シフト
                   </h1>
                   
-                  <div className="flex justify-center mb-2">
-                    <div className="w-72 h-64 relative flex items-center justify-center"> 
+                  {/* 【修正点1】ロゴの巨大化 (w-full, h-[400px]などに変更) */}
+                  <div className="flex justify-center mb-4">
+                    <div className="w-full h-[450px] relative flex items-center justify-center"> 
                       <img 
                         src={logoImage || '/logo.png'} 
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                         alt="店舗ロゴ" 
-                        className="w-full h-full object-contain drop-shadow-xl" 
+                        className="w-full h-full object-contain drop-shadow-2xl" 
                       />
                       {!logoImage && (
                           <div className="absolute inset-0 bg-gray-100/50 rounded-lg border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-500 font-bold backdrop-blur-sm -z-10">
-                          Logos
+                          No Logo
                           </div>
                       )}
                     </div>
@@ -456,7 +460,9 @@ export default function CalendarApp() {
                                     <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-8 font-bold flex items-center justify-center text-xs rounded-l border-y border-l border-black/10`}>
                                       {SHIFT_STYLES[shift.type].label}
                                     </span>
-                                    <span className="bg-gray-900 text-white font-bold px-2 py-1 flex-1 text-center truncate border-l border-white/20 rounded-r border-y border-r border-black/10">
+                                    {/* 【追加点3】BDキャストの表示強調 */}
+                                    <span className={`bg-gray-900 text-white font-bold px-2 py-1 flex-1 text-center truncate border-l border-white/20 rounded-r border-y border-r border-black/10 flex items-center justify-center gap-1 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
+                                      {shift.isBD && <Cake size={14} className="text-yellow-400 fill-yellow-400 animate-pulse"/>}
                                       {shift.castName}
                                     </span>
                                     <button 
@@ -487,6 +493,7 @@ export default function CalendarApp() {
         </div>
       </div>
 
+      {/* --- 入力モーダル --- */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setIsModalOpen(false)}>
           <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
@@ -498,11 +505,20 @@ export default function CalendarApp() {
               <label className="flex flex-col items-center cursor-pointer gap-1">
                  <input type="checkbox" checked={isEventInput} onChange={(e) => setIsEventInput(e.target.checked)} className="hidden" />
                  <Star size={28} className={`transition-all ${isEventInput ? 'text-yellow-400 fill-yellow-400 scale-110' : 'text-gray-300'}`}/>
-                 <span className="text-[10px] font-bold text-gray-500">イベント</span>
+                 <span className="text-[10px] font-bold text-gray-500">イベント日</span>
               </label>
             </div>
             
             <hr className="my-4 border-gray-100"/>
+
+            {/* 【追加点3】BD設定チェックボックス */}
+            <div className="mb-4 bg-pink-50 p-3 rounded-xl border border-pink-100">
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-700 justify-center">
+                <input type="checkbox" checked={isBDInput} onChange={(e) => setIsBDInput(e.target.checked)} className="w-5 h-5 accent-pink-500 rounded" />
+                <Cake size={20} className={isBDInput ? 'text-pink-500 fill-pink-200' : 'text-gray-400'}/>
+                <span className={isBDInput ? 'text-pink-600' : ''}>🎂 バースデーキャスト</span>
+              </label>
+            </div>
 
             <div className="mb-4">
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cast Name</label>
@@ -513,7 +529,6 @@ export default function CalendarApp() {
                 onChange={(e) => setInputName(e.target.value)}
                 className="w-full bg-gray-50 border-2 border-gray-200 p-3 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-lg font-bold transition-all"
                 placeholder="名前を選択 / 入力"
-                autoFocus
               />
               <datalist id="cast-options">
                 {registeredCasts.map((name, i) => <option key={i} value={name} />)}
