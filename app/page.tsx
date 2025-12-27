@@ -78,8 +78,6 @@ export default function CalendarApp() {
   ]);
   
   const [newCastNameInput, setNewCastNameInput] = useState('');
-  
-  // 設定タブ管理
   const [activeSettingsTab, setActiveSettingsTab] = useState<'none' | 'cast' | 'design'>('none');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -136,7 +134,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v26'); // Version 26
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v27'); // Version 27
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -177,7 +175,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, titleFont, castFont
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v26', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v27', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -243,7 +241,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v26');
+      localStorage.removeItem('girlsbar_calendar_data_v27');
       window.location.reload();
     }
   };
@@ -305,35 +303,54 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 画像生成 (ダブルショット & スケール固定) ---
+  // --- 強力な画像生成関数 (エラーを無視して突き進むダブルショット) ---
   const generateFinalImage = async () => {
     if (!calendarRef.current) return null;
 
-    // 1. ウォームアップ (超低画質で描画エンジンを叩き起こす)
-    await toJpeg(calendarRef.current, { quality: 0.1, width: 100, height: 100, pixelRatio: 0.1, style: { opacity: '0' } });
-    
-    // 2. 待機 (ブラウザの描画完了を待つ: 0.5秒)
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      // 0. フォント読み込み待ち
+      await document.fonts.ready;
+      
+      // 1. ウォームアップ（失敗しても無視して次へ進む）
+      try {
+        await toJpeg(calendarRef.current, { 
+          quality: 0.1, 
+          width: 100, 
+          height: 100, 
+          pixelRatio: 0.1,
+          cacheBust: true,
+          style: { opacity: '0' } 
+        });
+      } catch (e) {
+        console.warn('Warmup failed, proceeding anyway:', e);
+      }
+      
+      // 2. 待機 (ブラウザの描画完了を待つ: 0.5秒)
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-    // 3. 本番生成 (1080px固定、背景色は白で明示的に指定)
-    // 背景画像をCSSで指定している場合、backgroundColorを指定すると上書きされず、
-    // 透過部分のベースカラーとして機能するため安定します。
-    const dataUrl = await toJpeg(calendarRef.current, {
-      quality: 0.95,
-      width: 1080, 
-      height: calendarRef.current.scrollHeight,
-      pixelRatio: 1, 
-      backgroundColor: '#ffffff', // 【重要】透過防止の安全策として白背景を指定
-      style: { 
-        transform: 'none', 
-        transformOrigin: 'top left', 
-        margin: '0', 
-        padding: '0' 
-      } 
-    });
-    return dataUrl;
+      // 3. 本番生成
+      const dataUrl = await toJpeg(calendarRef.current, {
+        quality: 0.9, // 画質を少し落として安定性向上
+        width: 1080, 
+        height: calendarRef.current.scrollHeight,
+        pixelRatio: 1, 
+        cacheBust: true, // キャッシュを無視して再描画させる
+        backgroundColor: '#ffffff', // 安全策の白背景
+        style: { 
+          transform: 'none', 
+          transformOrigin: 'top left', 
+          margin: '0', 
+          padding: '0' 
+        } 
+      });
+      return dataUrl;
+    } catch (e) {
+      console.error('Final generation failed:', e);
+      return null;
+    }
   };
 
+  // --- 自動保存（シェア） ---
   const handleAutoSave = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
@@ -341,7 +358,7 @@ export default function CalendarApp() {
 
     try {
       const dataUrl = await generateFinalImage();
-      if (!dataUrl) throw new Error('Generation failed');
+      if (!dataUrl) throw new Error('Generation returned null');
 
       const res = await fetch(dataUrl);
       const blob = await res.blob();
@@ -361,6 +378,7 @@ export default function CalendarApp() {
       }
     } catch (err) {
       console.error('Save failed', err);
+      // シェアキャンセル以外のエラー
       if ((err as Error).name !== 'AbortError') {
         alert('保存に失敗しました。「長押し保存」を試してください。');
       }
@@ -369,6 +387,7 @@ export default function CalendarApp() {
     }
   };
 
+  // --- 長押し保存 ---
   const handleManualSave = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
@@ -379,7 +398,7 @@ export default function CalendarApp() {
       if (dataUrl) {
         setGeneratedImage(dataUrl);
       } else {
-        throw new Error('Image generation returned null');
+        throw new Error('Generation failed');
       }
     } catch(e) {
       alert('画像の生成に失敗しました。');
@@ -481,7 +500,6 @@ export default function CalendarApp() {
             </div>
           </div>
 
-          {/* 設定エリア (タブ式) */}
           {activeSettingsTab !== 'none' && (
             <div className="border-t pt-2 animate-in slide-in-from-top-2">
               <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
@@ -589,11 +607,13 @@ export default function CalendarApp() {
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">横</span>
-                           <input type="range" min="0" max="100" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           {/* 【修正】スライド範囲を拡大 */}
+                           <input type="range" min="-100" max="200" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">縦</span>
-                           <input type="range" min="0" max="100" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           {/* 【修正】スライド範囲を拡大 */}
+                           <input type="range" min="-100" max="200" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                       </div>
                     )}
@@ -628,7 +648,6 @@ export default function CalendarApp() {
              marginBottom: `-${(1080 * (1 - previewScale))}px`
            }}
         >
-          {/* 【修正】背景画像をCSSで指定するシンプルな構造に戻す (安定化のため) */}
           <div 
             ref={calendarRef} 
             className="bg-white min-w-[1080px] relative overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
@@ -655,7 +674,7 @@ export default function CalendarApp() {
 
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* タイトル: 透過背景 */}
+                {/* タイトル */}
                 <h1 
                   className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
                   style={{ fontFamily: titleFont, backgroundColor: 'rgba(255,255,255,0.7)' }}
@@ -664,7 +683,7 @@ export default function CalendarApp() {
                 </h1>
               </div>
 
-              {/* カレンダー: 半透明背景 */}
+              {/* カレンダー */}
               <div 
                 className="border-4 border-gray-900 shadow-lg rounded-sm overflow-hidden mt-4"
                 style={{ backgroundColor: 'rgba(255,255,255,0.6)' }}
