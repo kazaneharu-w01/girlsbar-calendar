@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera, Users, Palette, Droplets } from 'lucide-react';
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera, Users, Palette, Droplets, Type } from 'lucide-react';
 import { toBlob, toJpeg } from 'html-to-image';
 
 // --- 型定義 ---
@@ -31,6 +31,8 @@ type BackupData = {
   headerGap: number;
   isLogoWhite: boolean;
   overlayOpacity: number;
+  titleFont: string; // 追加
+  castFont: string;  // 追加
 };
 
 const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string }> = {
@@ -42,6 +44,15 @@ const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string 
 
 const HOURS_START = ['17','18','19','20','21','22','23','24','1','2','3'];
 const HOURS_END = ['21','22','23','24','1','2','3','4','5','6','7','LAST'];
+
+// フォント設定（Google Fontsの定義）
+const FONT_OPTIONS = [
+  { label: '標準 (ゴシック)', value: 'sans-serif' },
+  { label: '明朝体 (高級感)', value: '"Noto Serif JP", serif' },
+  { label: '丸ゴシック (可愛い)', value: '"M PLUS Rounded 1c", sans-serif' },
+  { label: '楷書体 (和風)', value: '"Kaisei Opti", serif' },
+  { label: '手書き風 (ゆるふわ)', value: '"Yomogi", cursive' },
+];
 
 export default function CalendarApp() {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -56,12 +67,14 @@ export default function CalendarApp() {
   const [isLogoWhite, setIsLogoWhite] = useState(false);
   
   const [bgZoom, setBgZoom] = useState(100);
-  const [bgX, setBgX] = useState(50);
-  const [bgY, setBgY] = useState(50);
+  const [bgX, setBgX] = useState(0);
+  const [bgY, setBgY] = useState(0);
   const [headerGap, setHeaderGap] = useState(20);
-  
-  // 透過度設定 (初期値60%)
   const [overlayOpacity, setOverlayOpacity] = useState(60);
+
+  // フォント状態 (初期値: 標準)
+  const [titleFont, setTitleFont] = useState(FONT_OPTIONS[0].value);
+  const [castFont, setCastFont] = useState(FONT_OPTIONS[0].value);
 
   const [registeredCasts, setRegisteredCasts] = useState<string[]>([
     'もねまろ', 'ころすけ', 'あんそにー', 'たろう', 'ななし',
@@ -69,7 +82,6 @@ export default function CalendarApp() {
   ]);
   
   const [newCastNameInput, setNewCastNameInput] = useState('');
-  
   const [activeSettingsTab, setActiveSettingsTab] = useState<'none' | 'cast' | 'design'>('none');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -126,7 +138,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v42'); // Version 42
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v43'); // Version 43
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -142,6 +154,9 @@ export default function CalendarApp() {
         if (parsed.month) setMonth(parsed.month);
         if (parsed.isLogoWhite !== undefined) setIsLogoWhite(parsed.isLogoWhite);
         if (parsed.overlayOpacity !== undefined) setOverlayOpacity(parsed.overlayOpacity);
+        // フォント設定の読み込み
+        if (parsed.titleFont) setTitleFont(parsed.titleFont);
+        if (parsed.castFont) setCastFont(parsed.castFont);
       }
     } catch (e) { console.error(e); }
     setIsLoaded(true);
@@ -163,15 +178,15 @@ export default function CalendarApp() {
     if (!isLoaded) return;
     const dataToSave = {
       shifts, eventMap, registeredCasts, backgroundImage, logoImage,
-      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
+      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity, titleFont, castFont
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v42', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v43', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
     }
-  }, [shifts, eventMap, registeredCasts, backgroundImage, logoImage, year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity, isLoaded]);
+  }, [shifts, eventMap, registeredCasts, backgroundImage, logoImage, year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity, titleFont, castFont, isLoaded]);
 
   const getDaysArray = () => {
     const startDay = isSecondHalf ? 16 : 1;
@@ -232,7 +247,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v42');
+      localStorage.removeItem('girlsbar_calendar_data_v43');
       window.location.reload();
     }
   };
@@ -240,7 +255,7 @@ export default function CalendarApp() {
   const exportData = () => {
     const data: BackupData = {
       shifts, eventMap, registeredCasts, backgroundImage, logoImage,
-      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
+      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity, titleFont, castFont
     };
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -272,6 +287,8 @@ export default function CalendarApp() {
         if(parsed.month) setMonth(parsed.month);
         if(parsed.isLogoWhite !== undefined) setIsLogoWhite(parsed.isLogoWhite);
         if(parsed.overlayOpacity !== undefined) setOverlayOpacity(parsed.overlayOpacity);
+        if(parsed.titleFont) setTitleFont(parsed.titleFont);
+        if(parsed.castFont) setCastFont(parsed.castFont);
         alert('データを読み込みました');
         setActiveSettingsTab('none');
       } catch (err) {
@@ -405,8 +422,11 @@ export default function CalendarApp() {
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans text-gray-800 pb-20">
+      {/* 【重要】フォントの一括事前読み込み */}
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Kaisei+Opti:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Noto+Sans+JP:wght@700&family=Noto+Serif+JP:wght@700&family=Yomogi&display=swap');
+      `}</style>
       
-      {/* --- 画像生成モーダル --- */}
       {generatedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="text-white text-center mb-4 font-bold text-lg animate-pulse">
@@ -526,6 +546,25 @@ export default function CalendarApp() {
                     </div>
                   </div>
 
+                  {/* 【復活】フォント選択 */}
+                  <div className="border-t pt-2">
+                    <label className="font-bold text-gray-600 text-xs mb-1 block flex items-center gap-1"><Type size={14}/> フォント</label>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-gray-400 text-[10px]">タイトル</span>
+                        <select value={titleFont} onChange={(e) => setTitleFont(e.target.value)} className="w-full border rounded p-1 bg-white">
+                          {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 text-[10px]">キャスト名</span>
+                        <select value={castFont} onChange={(e) => setCastFont(e.target.value)} className="w-full border rounded p-1 bg-white">
+                          {FONT_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="border-t pt-2">
                     <div className="flex items-center justify-between mb-2">
                       <label className="font-bold text-gray-600 text-xs">背景画像</label>
@@ -539,22 +578,20 @@ export default function CalendarApp() {
                       <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">拡大</span>
-                           {/* トリミング対策: 最小値10% */}
                            <input type="range" min="10" max="300" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">横</span>
-                           <input type="range" min="0" max="100" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="-500" max="500" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">縦</span>
-                           <input type="range" min="0" max="100" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="-500" max="500" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* 透過度スライダー */}
                   <div className="border-t pt-2">
                     <div className="flex items-center gap-2">
                        <Droplets size={14} className="text-gray-600"/>
@@ -593,17 +630,29 @@ export default function CalendarApp() {
              marginBottom: `-${(1080 * (1 - previewScale))}px`
            }}
         >
-          {/* 【重要】CSS背景画像方式（安定版） */}
           <div 
             ref={calendarRef} 
             className="bg-white min-w-[1080px] relative overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
-            style={{ 
-                backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
-                backgroundSize: `${bgZoom}%`,
-                backgroundPosition: `${bgX}% ${bgY}%`,
-                backgroundRepeat: 'no-repeat'
-            }}
           >
+            {/* 背景画像 */}
+            {backgroundImage && (
+              <div className="absolute inset-0 flex items-center justify-center z-0 overflow-hidden">
+                <img
+                  src={backgroundImage}
+                  style={{
+                    transform: `translate(${bgX}px, ${bgY}px) scale(${bgZoom / 100})`,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    maxWidth: 'none', 
+                    maxHeight: 'none'
+                  }}
+                  alt=""
+                  crossOrigin="anonymous" 
+                />
+              </div>
+            )}
+
             {/* コンテンツ */}
             <div className="relative z-10 pt-4 pb-6 px-8">
               <div className="text-center">
@@ -620,10 +669,10 @@ export default function CalendarApp() {
 
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* タイトル */}
+                {/* タイトル: フォント適用 */}
                 <h1 
                   className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
-                  style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})` }}
+                  style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})`, fontFamily: titleFont }}
                 >
                   {month}月{isSecondHalf ? '後半' : '前半'}シフト
                 </h1>
@@ -681,16 +730,16 @@ export default function CalendarApp() {
                             <div className="flex flex-col gap-1.5">
                               {shifts.filter(s => s.day === day).map(shift => (
                                 <div key={shift.id} className="flex items-stretch text-sm shadow-md relative group/chip transform transition-transform hover:scale-[1.02]">
-                                  {/* 【修正】文字サイズ拡大: w-9, font-extrabold, text-sm */}
                                   <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-9 font-extrabold flex items-center justify-center text-sm rounded-l border-y border-l border-black/10`}>
                                     {SHIFT_STYLES[shift.type].label}
                                   </span>
                                   
                                   <div className={`bg-gray-900 text-white font-bold px-1 py-1 flex-1 flex flex-col justify-center items-center text-center leading-none border-l border-white/20 rounded-r border-y border-r border-black/10 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
                                     {shift.timeRange && <span className="text-[10px] opacity-90 mb-0.5 font-mono">{shift.timeRange}</span>}
+                                    {/* キャスト名: フォント適用 */}
                                     <span className="flex items-center gap-1 truncate w-full justify-center">
                                       {shift.isBD && <Cake size={10} className="text-yellow-400 fill-yellow-400 shrink-0"/>}
-                                      <span className="truncate">{shift.castName}</span>
+                                      <span className="truncate" style={{ fontFamily: castFont }}>{shift.castName}</span>
                                     </span>
                                   </div>
                                   
