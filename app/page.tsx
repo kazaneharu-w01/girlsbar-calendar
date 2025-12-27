@@ -65,8 +65,8 @@ export default function CalendarApp() {
   const [isLogoWhite, setIsLogoWhite] = useState(false);
   
   const [bgZoom, setBgZoom] = useState(100);
-  const [bgX, setBgX] = useState(0);
-  const [bgY, setBgY] = useState(0);
+  const [bgX, setBgX] = useState(50);
+  const [bgY, setBgY] = useState(50);
   const [headerGap, setHeaderGap] = useState(20);
 
   const [titleFont, setTitleFont] = useState(FONT_OPTIONS[0].value);
@@ -136,7 +136,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v25'); // Version 25
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v26'); // Version 26
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -177,7 +177,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, titleFont, castFont
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v25', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v26', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -243,7 +243,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v25');
+      localStorage.removeItem('girlsbar_calendar_data_v26');
       window.location.reload();
     }
   };
@@ -285,7 +285,6 @@ export default function CalendarApp() {
         if(parsed.titleFont) setTitleFont(parsed.titleFont);
         if(parsed.castFont) setCastFont(parsed.castFont);
         alert('データを読み込みました');
-        // 【修正】ここで正しいセッター関数を使用
         setActiveSettingsTab('none');
       } catch (err) {
         alert('読み込みに失敗しました。');
@@ -310,18 +309,21 @@ export default function CalendarApp() {
   const generateFinalImage = async () => {
     if (!calendarRef.current) return null;
 
-    // 1. ウォームアップ (超低画質)
+    // 1. ウォームアップ (超低画質で描画エンジンを叩き起こす)
     await toJpeg(calendarRef.current, { quality: 0.1, width: 100, height: 100, pixelRatio: 0.1, style: { opacity: '0' } });
     
-    // 2. 待機
+    // 2. 待機 (ブラウザの描画完了を待つ: 0.5秒)
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // 3. 本番生成 (1080px固定、背景色指定なし)
+    // 3. 本番生成 (1080px固定、背景色は白で明示的に指定)
+    // 背景画像をCSSで指定している場合、backgroundColorを指定すると上書きされず、
+    // 透過部分のベースカラーとして機能するため安定します。
     const dataUrl = await toJpeg(calendarRef.current, {
       quality: 0.95,
       width: 1080, 
       height: calendarRef.current.scrollHeight,
       pixelRatio: 1, 
+      backgroundColor: '#ffffff', // 【重要】透過防止の安全策として白背景を指定
       style: { 
         transform: 'none', 
         transformOrigin: 'top left', 
@@ -332,7 +334,6 @@ export default function CalendarApp() {
     return dataUrl;
   };
 
-  // --- 自動保存（シェア） ---
   const handleAutoSave = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
@@ -368,7 +369,6 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存 ---
   const handleManualSave = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
@@ -420,7 +420,6 @@ export default function CalendarApp() {
         @import url('https://fonts.googleapis.com/css2?family=Kaisei+Opti:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Noto+Sans+JP:wght@700&family=Noto+Serif+JP:wght@700&family=Yomogi&display=swap');
       `}</style>
       
-      {/* 画像生成モーダル */}
       {generatedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="text-white text-center mb-4 font-bold text-lg animate-pulse">
@@ -590,11 +589,11 @@ export default function CalendarApp() {
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">横</span>
-                           <input type="range" min="-500" max="500" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="0" max="100" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">縦</span>
-                           <input type="range" min="-500" max="500" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="0" max="100" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                       </div>
                     )}
@@ -629,30 +628,18 @@ export default function CalendarApp() {
              marginBottom: `-${(1080 * (1 - previewScale))}px`
            }}
         >
+          {/* 【修正】背景画像をCSSで指定するシンプルな構造に戻す (安定化のため) */}
           <div 
             ref={calendarRef} 
-            // 【重要修正】bg-whiteを削除し、透過コンテナにする
-            className="relative min-w-[1080px] overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
+            className="bg-white min-w-[1080px] relative overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
+            style={{ 
+                backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
+                backgroundSize: `${bgZoom}%`,
+                backgroundPosition: `${bgX}% ${bgY}%`,
+                backgroundRepeat: 'no-repeat'
+            }}
           >
-            {/* レイヤー1: ベース白背景 (z-0) */}
-            <div className="absolute inset-0 bg-white z-0"></div>
-
-            {/* レイヤー2: 背景画像 (z-1) */}
-            {backgroundImage && (
-              <div className="absolute inset-0 overflow-hidden z-[1]">
-                <img 
-                  src={backgroundImage} 
-                  className="w-full h-full object-cover origin-center"
-                  style={{
-                    transform: `translate(${bgX}px, ${bgY}px) scale(${bgZoom / 100})`
-                  }}
-                  alt=""
-                  crossOrigin="anonymous" 
-                />
-              </div>
-            )}
-
-            {/* レイヤー3: コンテンツ (z-10) */}
+            {/* コンテンツ */}
             <div className="relative z-10 pt-4 pb-6 px-8">
               <div className="text-center">
                 <div className="flex justify-center mb-0">
@@ -696,7 +683,6 @@ export default function CalendarApp() {
                     const eventTitle = day ? eventMap[day] : undefined;
                     const isEvent = !!eventTitle;
                     
-                    // 背景透過度をさらに下げて「透け感」を出す
                     let bgClass = 'bg-white/40'; 
                     if (isSun) bgClass = 'bg-pink-50/40';
                     if (isSat) bgClass = 'bg-blue-50/40';

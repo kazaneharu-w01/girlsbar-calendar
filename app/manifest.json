@@ -1,6 +1,6 @@
 {
   "name": "GirlsBar Shift",
-  "short_name": "シフト表",
+  "short_name": "シフト表作成",
   "description": "ガールズバーのシフト管理カレンダー",
   "start_url": "/",
   "display": "standalone",
