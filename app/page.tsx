@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera, Users, Palette } from 'lucide-react';
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera, Users, Palette, Droplets } from 'lucide-react';
 import { toBlob, toJpeg } from 'html-to-image';
 
 // --- 型定義 ---
@@ -30,6 +30,7 @@ type BackupData = {
   bgY: number;
   headerGap: number;
   isLogoWhite: boolean;
+  overlayOpacity: number; // 追加: 透過度
 };
 
 const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string }> = {
@@ -58,6 +59,9 @@ export default function CalendarApp() {
   const [bgX, setBgX] = useState(0);
   const [bgY, setBgY] = useState(0);
   const [headerGap, setHeaderGap] = useState(20);
+  
+  // 【追加】透過度設定 (初期値95%)
+  const [overlayOpacity, setOverlayOpacity] = useState(95);
 
   const [registeredCasts, setRegisteredCasts] = useState<string[]>([
     'もねまろ', 'ころすけ', 'あんそにー', 'たろう', 'ななし',
@@ -66,7 +70,7 @@ export default function CalendarApp() {
   
   const [newCastNameInput, setNewCastNameInput] = useState('');
   
-  // 設定タブ管理 ('none' | 'cast' | 'design')
+  // 設定タブ管理
   const [activeSettingsTab, setActiveSettingsTab] = useState<'none' | 'cast' | 'design'>('none');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -123,7 +127,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v38'); // Version 38
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v39'); // Version 39
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -138,6 +142,7 @@ export default function CalendarApp() {
         if (parsed.year) setYear(parsed.year);
         if (parsed.month) setMonth(parsed.month);
         if (parsed.isLogoWhite !== undefined) setIsLogoWhite(parsed.isLogoWhite);
+        if (parsed.overlayOpacity !== undefined) setOverlayOpacity(parsed.overlayOpacity);
       }
     } catch (e) { console.error(e); }
     setIsLoaded(true);
@@ -159,15 +164,15 @@ export default function CalendarApp() {
     if (!isLoaded) return;
     const dataToSave = {
       shifts, eventMap, registeredCasts, backgroundImage, logoImage,
-      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
+      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v38', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v39', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
     }
-  }, [shifts, eventMap, registeredCasts, backgroundImage, logoImage, year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, isLoaded]);
+  }, [shifts, eventMap, registeredCasts, backgroundImage, logoImage, year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity, isLoaded]);
 
   const getDaysArray = () => {
     const startDay = isSecondHalf ? 16 : 1;
@@ -228,7 +233,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v38');
+      localStorage.removeItem('girlsbar_calendar_data_v39');
       window.location.reload();
     }
   };
@@ -236,7 +241,7 @@ export default function CalendarApp() {
   const exportData = () => {
     const data: BackupData = {
       shifts, eventMap, registeredCasts, backgroundImage, logoImage,
-      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite
+      year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
     };
     const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -267,6 +272,7 @@ export default function CalendarApp() {
         if(parsed.year) setYear(parsed.year);
         if(parsed.month) setMonth(parsed.month);
         if(parsed.isLogoWhite !== undefined) setIsLogoWhite(parsed.isLogoWhite);
+        if(parsed.overlayOpacity !== undefined) setOverlayOpacity(parsed.overlayOpacity);
         alert('データを読み込みました');
         setActiveSettingsTab('none');
       } catch (err) {
@@ -446,10 +452,7 @@ export default function CalendarApp() {
             </div>
 
             <div className="flex gap-2">
-              <button 
-                onClick={() => setActiveSettingsTab(activeSettingsTab === 'none' ? 'cast' : 'none')} 
-                className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${activeSettingsTab !== 'none' ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}
-              >
+              <button onClick={() => setActiveSettingsTab(activeSettingsTab === 'none' ? 'cast' : 'none')} className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${activeSettingsTab !== 'none' ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}>
                 <Settings size={20} />
               </button>
               
@@ -467,45 +470,34 @@ export default function CalendarApp() {
           {activeSettingsTab !== 'none' && (
             <div className="border-t pt-2 animate-in slide-in-from-top-2">
               <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-                <button 
-                  onClick={() => setActiveSettingsTab('cast')}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSettingsTab === 'cast' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
-                >
+                <button onClick={() => setActiveSettingsTab('cast')} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSettingsTab === 'cast' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
                   <Users size={14}/> キャスト管理
                 </button>
-                <button 
-                  onClick={() => setActiveSettingsTab('design')}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSettingsTab === 'design' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
-                >
+                <button onClick={() => setActiveSettingsTab('design')} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSettingsTab === 'design' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
                   <Palette size={14}/> デザイン調整
                 </button>
                 <div className="flex-1"></div>
-                <button onClick={() => setActiveSettingsTab('none')} className="text-gray-400 hover:text-gray-600">
-                  <X size={20} />
-                </button>
+                <button onClick={() => setActiveSettingsTab('none')} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
               </div>
 
+              {/* キャスト管理 */}
               {activeSettingsTab === 'cast' && (
                 <div className="p-3 bg-gray-50 rounded border">
                   <div className="flex items-center justify-between mb-4 border-b pb-2">
                     <span className="font-bold text-gray-600 text-xs">データバックアップ</span>
                     <div className="flex gap-2">
-                      <button onClick={exportData} className="flex items-center gap-1 bg-white border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-100">
-                        <FileDown size={12}/> 保存
-                      </button>
+                      <button onClick={exportData} className="flex items-center gap-1 bg-white border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-100"><FileDown size={12}/> 保存</button>
                       <label className="flex items-center gap-1 bg-white border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-100 cursor-pointer">
                         <FileUp size={12}/> 復元
                         <input type="file" accept=".json" onChange={importData} className="hidden" ref={fileInputRefImport} />
                       </label>
                     </div>
                   </div>
-
                   <label className="block font-bold mb-2 text-gray-600 flex items-center gap-1 text-xs">新規キャスト追加</label>
                   <div className="flex gap-2 mb-3">
                     <input type="text" value={newCastNameInput} onChange={(e) => setNewCastNameInput(e.target.value)} className="border p-2 rounded flex-1 outline-none text-sm" placeholder="名前を入力" />
                     <button onClick={addNewCast} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 font-bold text-xs whitespace-nowrap">追加</button>
                   </div>
-                  
                   <div className="border-t pt-2">
                     <label className="block text-xs font-bold text-gray-500 mb-1">登録済みキャスト</label>
                     <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-1 bg-white rounded border border-gray-200">
@@ -523,6 +515,7 @@ export default function CalendarApp() {
                 </div>
               )}
 
+              {/* デザイン調整 */}
               {activeSettingsTab === 'design' && (
                 <div className="p-3 bg-gray-50 rounded border space-y-3">
                   <div className="flex items-center justify-between">
@@ -549,24 +542,34 @@ export default function CalendarApp() {
                       <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">拡大</span>
-                           <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="10" max="300" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">横</span>
-                           <input type="range" min="-100" max="200" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="-500" max="500" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">縦</span>
-                           <input type="range" min="-100" max="200" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="-500" max="500" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                       </div>
                     )}
                   </div>
 
+                  {/* 【追加】透過度スライダー */}
+                  <div className="border-t pt-2">
+                    <div className="flex items-center gap-2">
+                       <Droplets size={14} className="text-gray-600"/>
+                       <span className="text-xs font-bold w-20">透過</span>
+                       <input type="range" min="0" max="100" step="5" value={overlayOpacity} onChange={(e) => setOverlayOpacity(Number(e.target.value))} className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
+                       <span className="text-xs w-8 text-right">{overlayOpacity}%</span>
+                    </div>
+                  </div>
+
                   <div className="border-t pt-2">
                     <div className="flex items-center gap-2">
                        <MoveVertical size={14} className="text-gray-600"/>
-                       <span className="text-xs font-bold w-12">隙間</span>
+                       <span className="text-xs font-bold w-20">隙間</span>
                        <input type="range" min="0" max="600" step="10" value={headerGap} onChange={(e) => setHeaderGap(Number(e.target.value))} className="flex-1 h-1 bg-blue-200 rounded-lg appearance-none cursor-pointer" />
                     </div>
                   </div>
@@ -592,17 +595,31 @@ export default function CalendarApp() {
              marginBottom: `-${(1080 * (1 - previewScale))}px`
            }}
         >
+          {/* 【重要】背景画像の配置（トリミング回避・ズーム・移動対応） */}
           <div 
             ref={calendarRef} 
             className="bg-white min-w-[1080px] relative overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
-            style={{ 
-                backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
-                backgroundSize: `${bgZoom}%`,
-                backgroundPosition: `${bgX}% ${bgY}%`,
-                backgroundRepeat: 'no-repeat'
-            }}
           >
-            {/* コンテンツ */}
+            {/* 背景画像レイヤー */}
+            {backgroundImage && (
+              <div className="absolute inset-0 flex items-center justify-center z-0 overflow-hidden">
+                <img
+                  src={backgroundImage}
+                  style={{
+                    transform: `translate(${bgX}px, ${bgY}px) scale(${bgZoom / 100})`,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    maxWidth: 'none', 
+                    maxHeight: 'none'
+                  }}
+                  alt=""
+                  crossOrigin="anonymous" 
+                />
+              </div>
+            )}
+
+            {/* コンテンツレイヤー */}
             <div className="relative z-10 pt-4 pb-6 px-8">
               <div className="text-center">
                 <div className="flex justify-center mb-0">
@@ -618,21 +635,27 @@ export default function CalendarApp() {
 
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* タイトル: 巨大化(text-6xl) */}
-                <h1 className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/95 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900 relative z-20">
+                {/* タイトル: 透過度スライダー連動 */}
+                <h1 
+                  className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
+                  style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})` }}
+                >
                   {month}月{isSecondHalf ? '後半' : '前半'}シフト
                 </h1>
               </div>
 
-              {/* カレンダー (透過なし: bg-white/95) */}
-              <div className="border-4 border-gray-900 bg-white/95 shadow-lg rounded-sm overflow-hidden mt-4">
+              {/* カレンダー: 透過度スライダー連動 */}
+              <div 
+                className="border-4 border-gray-900 shadow-lg rounded-sm overflow-hidden mt-4"
+                style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})` }}
+              >
                 <div className="grid grid-cols-7 bg-gray-800 text-white font-bold text-center border-b-4 border-gray-900">
                   {['日', '月', '火', '水', '木', '金', '土'].map((d, i) => (
                     <div key={d} className={`py-3 text-lg border-r border-gray-600 last:border-r-0 ${i===0 ? 'text-pink-300' : ''} ${i===6 ? 'text-blue-300' : ''}`}>{d}</div>
                   ))}
                 </div>
 
-                <div className="grid grid-cols-7 bg-white/40">
+                <div className="grid grid-cols-7" style={{ backgroundColor: `rgba(255,255,255, ${(overlayOpacity > 50 ? overlayOpacity - 40 : 10) / 100})` }}>
                   {days.map((day, i) => {
                     const weekIndex = i % 7;
                     const isSun = weekIndex === 0;
@@ -640,17 +663,18 @@ export default function CalendarApp() {
                     const eventTitle = day ? eventMap[day] : undefined;
                     const isEvent = !!eventTitle;
                     
-                    // 背景不透明
-                    let bgClass = 'bg-white/95'; 
-                    if (isSun) bgClass = 'bg-pink-50/95';
-                    if (isSat) bgClass = 'bg-blue-50/95';
-                    if (isEvent) bgClass = isSun ? 'bg-pink-100/95' : (isSat ? 'bg-blue-100/95' : 'bg-yellow-50/95');
+                    // セルの背景色も透過させる
+                    let bgClass = `rgba(255,255,255, ${overlayOpacity/100})`; 
+                    if (isSun) bgClass = `rgba(255, 200, 200, ${overlayOpacity/100})`;
+                    if (isSat) bgClass = `rgba(200, 200, 255, ${overlayOpacity/100})`;
+                    if (isEvent) bgClass = isSun ? `rgba(255, 220, 220, ${overlayOpacity/100})` : (isSat ? `rgba(220, 220, 255, ${overlayOpacity/100})` : `rgba(255, 255, 200, ${overlayOpacity/100})`);
 
                     return (
                       <div 
                         key={i} 
-                        className={`min-h-[140px] border-b-2 border-r-2 border-gray-300 p-1.5 relative group transition-colors ${bgClass} ${day ? 'cursor-pointer hover:bg-yellow-100' : ''}`}
+                        className={`min-h-[140px] border-b-2 border-r-2 border-gray-300 p-1.5 relative group transition-colors ${day ? 'cursor-pointer hover:bg-yellow-100/80' : ''}`}
                         onClick={() => day && openModal(day)}
+                        style={{ backgroundColor: bgClass }}
                       >
                         {day && (
                           <>
