@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
-import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera, Users, Palette } from 'lucide-react';
-// toBlobをインポートに追加（メモリ節約のため直接Blob生成を行う）
+import { Download, Star, Image as ImageIcon, UserPlus, Settings, RotateCcw, AlertCircle, Cake, MoveVertical, ToggleLeft, ToggleRight, Eye, Plus, Trash2, Save, X, Clock, Check, Share, FileUp, FileDown, Smartphone, Camera, Users, Palette, Type } from 'lucide-react';
 import { toBlob, toJpeg } from 'html-to-image';
 
 // --- 型定義 ---
@@ -45,6 +44,7 @@ const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string 
 const HOURS_START = ['17','18','19','20','21','22','23','24','1','2','3'];
 const HOURS_END = ['21','22','23','24','1','2','3','4','5','6','7','LAST'];
 
+// フォント設定
 const FONT_OPTIONS = [
   { label: '標準 (ゴシック)', value: 'sans-serif' },
   { label: '明朝体 (高級感)', value: '"Noto Serif JP", serif' },
@@ -137,7 +137,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v31'); // Version 31
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v30'); // Version 30
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -178,7 +178,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, titleFont, castFont
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v31', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v30', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -244,7 +244,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v31');
+      localStorage.removeItem('girlsbar_calendar_data_v30');
       window.location.reload();
     }
   };
@@ -306,33 +306,32 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存（シェア） with 軽量ダブルショット ---
+  // --- 自動保存（シェア） with ダブルショット ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // 1. 軽い空打ち (キャッシュの呼び起こし)
-      // toJpegは成功率が高いので、これをダミー実行に使う
+      // 1. ダミー変換 (1回目) - 読み込みを確定させる
       await toJpeg(calendarRef.current, {
         quality: 0.1,
-        width: 100, height: 100,
-        pixelRatio: 0.1,
-        style: { opacity: '0' }
+        width: 1080, 
+        height: calendarRef.current.scrollHeight,
+        pixelRatio: 1, 
+        style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
-      // 2. 短い待機 (0.1秒だけ待つ)
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // 2. 少し待機
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. 本番生成 (toBlobで直接ファイル化)
-      // これが成功していた頃のロジック
+      // 3. 本番変換 (2回目: Blob) - 成功実績のある toBlob を使用
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
         height: calendarRef.current.scrollHeight,
         pixelRatio: 1, 
-        // 背景色を指定しないことでCSS背景画像を生かす
+        // 背景色を指定せず、CSSの背景画像を生かす
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
@@ -340,7 +339,6 @@ export default function CalendarApp() {
 
       const file = new File([blob], `shift_${year}_${month}.jpg`, { type: 'image/jpeg' });
       
-      // Web Share API
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
@@ -348,7 +346,6 @@ export default function CalendarApp() {
           text: `${year}年${month}月のシフト表`
         });
       } else {
-        // PC等用フォールバック
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.download = `shift_${year}_${month}_${isSecondHalf?'2':'1'}.jpg`;
@@ -365,16 +362,22 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存（画像生成して表示） ---
+  // --- 長押し保存 ---
   const handleManualSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // こちらも同様にダブルショット
-      await toJpeg(calendarRef.current, { quality: 0.1, width: 100, height: 100, pixelRatio: 0.1, style: { opacity: '0' } });
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await toJpeg(calendarRef.current, {
+        quality: 0.1,
+        width: 1080,
+        height: calendarRef.current.scrollHeight,
+        pixelRatio: 1,
+        style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const dataUrl = await toJpeg(calendarRef.current, {
         quality: 0.95,
@@ -423,6 +426,7 @@ export default function CalendarApp() {
         @import url('https://fonts.googleapis.com/css2?family=Kaisei+Opti:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Noto+Sans+JP:wght@700&family=Noto+Serif+JP:wght@700&family=Yomogi&display=swap');
       `}</style>
       
+      {/* 画像生成モーダル */}
       {generatedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="text-white text-center mb-4 font-bold text-lg animate-pulse">
@@ -484,7 +488,7 @@ export default function CalendarApp() {
             </div>
           </div>
 
-          {/* 設定エリア */}
+          {/* 設定エリア (タブ式) */}
           {activeSettingsTab !== 'none' && (
             <div className="border-t pt-2 animate-in slide-in-from-top-2">
               <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
@@ -631,7 +635,7 @@ export default function CalendarApp() {
              marginBottom: `-${(1080 * (1 - previewScale))}px`
            }}
         >
-          {/* 【重要】CSS背景画像方式に戻し、安定性を確保 */}
+          {/* 【重要】CSS背景画像方式（安定版） */}
           <div 
             ref={calendarRef} 
             className="bg-white min-w-[1080px] relative overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
@@ -658,16 +662,16 @@ export default function CalendarApp() {
 
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* タイトル */}
+                {/* タイトル: 透過背景 (rgba) */}
                 <h1 
                   className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
-                  style={{ fontFamily: titleFont, backgroundColor: 'rgba(255,255,255,0.7)' }}
+                  style={{ backgroundColor: 'rgba(255,255,255,0.7)', fontFamily: titleFont }}
                 >
                   {month}月{isSecondHalf ? '後半' : '前半'}シフト
                 </h1>
               </div>
 
-              {/* カレンダー */}
+              {/* カレンダー: 半透明背景 (rgba) */}
               <div 
                 className="border-4 border-gray-900 shadow-lg rounded-sm overflow-hidden mt-4"
                 style={{ backgroundColor: 'rgba(255,255,255,0.6)' }}
@@ -686,6 +690,7 @@ export default function CalendarApp() {
                     const eventTitle = day ? eventMap[day] : undefined;
                     const isEvent = !!eventTitle;
                     
+                    // 背景透過度: 単色rgbaで透け感を表現
                     let bgClass = 'bg-white/40'; 
                     if (isSun) bgClass = 'bg-pink-50/40';
                     if (isSat) bgClass = 'bg-blue-50/40';
