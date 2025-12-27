@@ -66,10 +66,11 @@ export default function CalendarApp() {
   const [isLogoWhite, setIsLogoWhite] = useState(false);
   
   const [bgZoom, setBgZoom] = useState(100);
-  const [bgX, setBgX] = useState(0);
-  const [bgY, setBgY] = useState(0);
+  const [bgX, setBgX] = useState(50);
+  const [bgY, setBgY] = useState(50);
   const [headerGap, setHeaderGap] = useState(20);
 
+  // フォント状態
   const [titleFont, setTitleFont] = useState(FONT_OPTIONS[0].value);
   const [castFont, setCastFont] = useState(FONT_OPTIONS[0].value);
 
@@ -80,7 +81,7 @@ export default function CalendarApp() {
   
   const [newCastNameInput, setNewCastNameInput] = useState('');
   
-  // 設定タブ管理
+  // 設定タブ管理 ('none' | 'cast' | 'design')
   const [activeSettingsTab, setActiveSettingsTab] = useState<'none' | 'cast' | 'design'>('none');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -137,7 +138,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v30'); // Version 30
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v33'); // Version 33
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -178,7 +179,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, titleFont, castFont
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v30', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v33', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -244,7 +245,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v30');
+      localStorage.removeItem('girlsbar_calendar_data_v33');
       window.location.reload();
     }
   };
@@ -306,14 +307,14 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存（シェア） with ダブルショット ---
+  // --- 保存処理: 添付コードのロジック (ダブルショット) ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // 1. ダミー変換 (1回目) - 読み込みを確定させる
+      // 1. ダミー変換 (1回目)
       await toJpeg(calendarRef.current, {
         quality: 0.1,
         width: 1080, 
@@ -322,16 +323,15 @@ export default function CalendarApp() {
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
-      // 2. 少し待機
+      // 2. 待機
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. 本番変換 (2回目: Blob) - 成功実績のある toBlob を使用
+      // 3. 本番変換 (2回目: Blob)
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
         height: calendarRef.current.scrollHeight,
         pixelRatio: 1, 
-        // 背景色を指定せず、CSSの背景画像を生かす
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
@@ -362,13 +362,13 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存 ---
   const handleManualSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
+      // 1. ダミー変換
       await toJpeg(calendarRef.current, {
         quality: 0.1,
         width: 1080,
@@ -376,9 +376,11 @@ export default function CalendarApp() {
         pixelRatio: 1,
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
-      
+
+      // 2. 待機
       await new Promise(resolve => setTimeout(resolve, 500));
 
+      // 3. 本番変換
       const dataUrl = await toJpeg(calendarRef.current, {
         quality: 0.95,
         width: 1080,
@@ -662,20 +664,16 @@ export default function CalendarApp() {
 
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* タイトル: 透過背景 (rgba) */}
+                {/* タイトル: 巨大化(text-6xl)・フォント適用 */}
                 <h1 
-                  className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.7)', fontFamily: titleFont }}
+                  className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900 relative z-20"
+                  style={{ fontFamily: titleFont }}
                 >
                   {month}月{isSecondHalf ? '後半' : '前半'}シフト
                 </h1>
               </div>
 
-              {/* カレンダー: 半透明背景 (rgba) */}
-              <div 
-                className="border-4 border-gray-900 shadow-lg rounded-sm overflow-hidden mt-4"
-                style={{ backgroundColor: 'rgba(255,255,255,0.6)' }}
-              >
+              <div className="border-4 border-gray-900 bg-white/90 shadow-lg rounded-sm overflow-hidden mt-4">
                 <div className="grid grid-cols-7 bg-gray-800 text-white font-bold text-center border-b-4 border-gray-900">
                   {['日', '月', '火', '水', '木', '金', '土'].map((d, i) => (
                     <div key={d} className={`py-3 text-lg border-r border-gray-600 last:border-r-0 ${i===0 ? 'text-pink-300' : ''} ${i===6 ? 'text-blue-300' : ''}`}>{d}</div>
@@ -690,16 +688,15 @@ export default function CalendarApp() {
                     const eventTitle = day ? eventMap[day] : undefined;
                     const isEvent = !!eventTitle;
                     
-                    // 背景透過度: 単色rgbaで透け感を表現
-                    let bgClass = 'bg-white/40'; 
-                    if (isSun) bgClass = 'bg-pink-50/40';
-                    if (isSat) bgClass = 'bg-blue-50/40';
-                    if (isEvent) bgClass = isSun ? 'bg-pink-100/60' : (isSat ? 'bg-blue-100/60' : 'bg-yellow-50/60');
+                    let bgClass = 'bg-white/95'; 
+                    if (isSun) bgClass = 'bg-pink-50/95';
+                    if (isSat) bgClass = 'bg-blue-50/95';
+                    if (isEvent) bgClass = isSun ? 'bg-pink-100/95' : (isSat ? 'bg-blue-100/95' : 'bg-yellow-50/95');
 
                     return (
                       <div 
                         key={i} 
-                        className={`min-h-[140px] border-b-2 border-r-2 border-gray-300 p-1.5 relative group transition-colors ${bgClass} ${day ? 'cursor-pointer hover:bg-yellow-100/80' : ''}`}
+                        className={`min-h-[140px] border-b-2 border-r-2 border-gray-300 p-1.5 relative group transition-colors ${bgClass} ${day ? 'cursor-pointer hover:bg-yellow-100' : ''}`}
                         onClick={() => day && openModal(day)}
                       >
                         {day && (
@@ -731,6 +728,7 @@ export default function CalendarApp() {
                                     {shift.timeRange && <span className="text-[10px] opacity-90 mb-0.5 font-mono">{shift.timeRange}</span>}
                                     <span className="flex items-center gap-1 truncate w-full justify-center">
                                       {shift.isBD && <Cake size={10} className="text-yellow-400 fill-yellow-400 shrink-0"/>}
+                                      {/* キャスト名: フォント適用 */}
                                       <span className="truncate" style={{ fontFamily: castFont }}>{shift.castName}</span>
                                     </span>
                                   </div>
