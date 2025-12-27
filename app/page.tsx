@@ -30,7 +30,7 @@ type BackupData = {
   bgY: number;
   headerGap: number;
   isLogoWhite: boolean;
-  overlayOpacity: number; // 追加: 透過度
+  overlayOpacity: number;
 };
 
 const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string }> = {
@@ -60,8 +60,8 @@ export default function CalendarApp() {
   const [bgY, setBgY] = useState(0);
   const [headerGap, setHeaderGap] = useState(20);
   
-  // 【追加】透過度設定 (初期値95%)
-  const [overlayOpacity, setOverlayOpacity] = useState(95);
+  // 【変更】透過度設定 (初期値を60%に変更)
+  const [overlayOpacity, setOverlayOpacity] = useState(60);
 
   const [registeredCasts, setRegisteredCasts] = useState<string[]>([
     'もねまろ', 'ころすけ', 'あんそにー', 'たろう', 'ななし',
@@ -70,7 +70,6 @@ export default function CalendarApp() {
   
   const [newCastNameInput, setNewCastNameInput] = useState('');
   
-  // 設定タブ管理
   const [activeSettingsTab, setActiveSettingsTab] = useState<'none' | 'cast' | 'design'>('none');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -127,7 +126,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v39'); // Version 39
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v40'); // Version 40
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -167,7 +166,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v39', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v40', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -233,7 +232,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v39');
+      localStorage.removeItem('girlsbar_calendar_data_v40');
       window.location.reload();
     }
   };
@@ -294,7 +293,7 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存（シェア）: 添付コード準拠 ---
+  // --- 自動保存（シェア） ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
@@ -346,7 +345,7 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存: 添付コード準拠 ---
+  // --- 長押し保存 ---
   const handleManualSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
@@ -406,8 +405,10 @@ export default function CalendarApp() {
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans text-gray-800 pb-20">
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Kaisei+Opti:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Noto+Sans+JP:wght@700&family=Noto+Serif+JP:wght@700&family=Yomogi&display=swap');
+      `}</style>
       
-      {/* --- 生成後の画像表示モーダル (長押し用) --- */}
       {generatedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="text-white text-center mb-4 font-bold text-lg animate-pulse">
@@ -452,7 +453,10 @@ export default function CalendarApp() {
             </div>
 
             <div className="flex gap-2">
-              <button onClick={() => setActiveSettingsTab(activeSettingsTab === 'none' ? 'cast' : 'none')} className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${activeSettingsTab !== 'none' ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}>
+              <button 
+                onClick={() => setActiveSettingsTab(activeSettingsTab === 'none' ? 'cast' : 'none')} 
+                className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${activeSettingsTab !== 'none' ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}
+              >
                 <Settings size={20} />
               </button>
               
@@ -470,34 +474,45 @@ export default function CalendarApp() {
           {activeSettingsTab !== 'none' && (
             <div className="border-t pt-2 animate-in slide-in-from-top-2">
               <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-                <button onClick={() => setActiveSettingsTab('cast')} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSettingsTab === 'cast' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                <button 
+                  onClick={() => setActiveSettingsTab('cast')}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSettingsTab === 'cast' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+                >
                   <Users size={14}/> キャスト管理
                 </button>
-                <button onClick={() => setActiveSettingsTab('design')} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSettingsTab === 'design' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                <button 
+                  onClick={() => setActiveSettingsTab('design')}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeSettingsTab === 'design' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+                >
                   <Palette size={14}/> デザイン調整
                 </button>
                 <div className="flex-1"></div>
-                <button onClick={() => setActiveSettingsTab('none')} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+                <button onClick={() => setActiveSettingsTab('none')} className="text-gray-400 hover:text-gray-600">
+                  <X size={20} />
+                </button>
               </div>
 
-              {/* キャスト管理 */}
               {activeSettingsTab === 'cast' && (
                 <div className="p-3 bg-gray-50 rounded border">
                   <div className="flex items-center justify-between mb-4 border-b pb-2">
                     <span className="font-bold text-gray-600 text-xs">データバックアップ</span>
                     <div className="flex gap-2">
-                      <button onClick={exportData} className="flex items-center gap-1 bg-white border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-100"><FileDown size={12}/> 保存</button>
+                      <button onClick={exportData} className="flex items-center gap-1 bg-white border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-100">
+                        <FileDown size={12}/> 保存
+                      </button>
                       <label className="flex items-center gap-1 bg-white border border-gray-300 px-2 py-1 rounded text-xs hover:bg-gray-100 cursor-pointer">
                         <FileUp size={12}/> 復元
                         <input type="file" accept=".json" onChange={importData} className="hidden" ref={fileInputRefImport} />
                       </label>
                     </div>
                   </div>
+
                   <label className="block font-bold mb-2 text-gray-600 flex items-center gap-1 text-xs">新規キャスト追加</label>
                   <div className="flex gap-2 mb-3">
                     <input type="text" value={newCastNameInput} onChange={(e) => setNewCastNameInput(e.target.value)} className="border p-2 rounded flex-1 outline-none text-sm" placeholder="名前を入力" />
                     <button onClick={addNewCast} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 font-bold text-xs whitespace-nowrap">追加</button>
                   </div>
+                  
                   <div className="border-t pt-2">
                     <label className="block text-xs font-bold text-gray-500 mb-1">登録済みキャスト</label>
                     <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-1 bg-white rounded border border-gray-200">
@@ -515,7 +530,6 @@ export default function CalendarApp() {
                 </div>
               )}
 
-              {/* デザイン調整 */}
               {activeSettingsTab === 'design' && (
                 <div className="p-3 bg-gray-50 rounded border space-y-3">
                   <div className="flex items-center justify-between">
