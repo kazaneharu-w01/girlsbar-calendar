@@ -55,7 +55,6 @@ export default function CalendarApp() {
   const [logoImage, setLogoImage] = useState<string | null>('/logo.png'); 
   const [isLogoWhite, setIsLogoWhite] = useState(false);
   
-  // 背景調整 (初期値を中央・等倍に設定)
   const [bgZoom, setBgZoom] = useState(100);
   const [bgX, setBgX] = useState(50);
   const [bgY, setBgY] = useState(50);
@@ -71,7 +70,6 @@ export default function CalendarApp() {
   
   const [newCastNameInput, setNewCastNameInput] = useState('');
   
-  // 設定タブ
   const [activeSettingsTab, setActiveSettingsTab] = useState<'none' | 'cast' | 'design'>('none');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -128,7 +126,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v41'); // Version 41
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v42'); // Version 42
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -168,7 +166,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v41', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v42', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -234,7 +232,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v41');
+      localStorage.removeItem('girlsbar_calendar_data_v42');
       window.location.reload();
     }
   };
@@ -295,7 +293,7 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存（シェア）: 安定版ロジック ---
+  // --- 自動保存（シェア） ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
@@ -541,7 +539,7 @@ export default function CalendarApp() {
                       <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">拡大</span>
-                           {/* 【修正】トリミング対策: 最小値を10%にして縮小可能に */}
+                           {/* トリミング対策: 最小値10% */}
                            <input type="range" min="10" max="300" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
@@ -622,7 +620,7 @@ export default function CalendarApp() {
 
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* タイトル: 透過度スライダー連動 */}
+                {/* タイトル */}
                 <h1 
                   className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
                   style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})` }}
@@ -631,7 +629,7 @@ export default function CalendarApp() {
                 </h1>
               </div>
 
-              {/* カレンダー: 透過度スライダー連動 */}
+              {/* カレンダー */}
               <div 
                 className="border-4 border-gray-900 shadow-lg rounded-sm overflow-hidden mt-4"
                 style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})` }}
@@ -642,7 +640,6 @@ export default function CalendarApp() {
                   ))}
                 </div>
 
-                {/* セルの背景色もスライダー連動 */}
                 <div className="grid grid-cols-7" style={{ backgroundColor: `rgba(255,255,255, ${(overlayOpacity > 50 ? overlayOpacity - 40 : 10) / 100})` }}>
                   {days.map((day, i) => {
                     const weekIndex = i % 7;
@@ -684,7 +681,8 @@ export default function CalendarApp() {
                             <div className="flex flex-col gap-1.5">
                               {shifts.filter(s => s.day === day).map(shift => (
                                 <div key={shift.id} className="flex items-stretch text-sm shadow-md relative group/chip transform transition-transform hover:scale-[1.02]">
-                                  <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-8 font-bold flex items-center justify-center text-xs rounded-l border-y border-l border-black/10`}>
+                                  {/* 【修正】文字サイズ拡大: w-9, font-extrabold, text-sm */}
+                                  <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-9 font-extrabold flex items-center justify-center text-sm rounded-l border-y border-l border-black/10`}>
                                     {SHIFT_STYLES[shift.type].label}
                                   </span>
                                   
