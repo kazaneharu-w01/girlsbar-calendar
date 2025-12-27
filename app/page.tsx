@@ -45,12 +45,13 @@ const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string 
 const HOURS_START = ['17','18','19','20','21','22','23','24','1','2','3'];
 const HOURS_END = ['21','22','23','24','1','2','3','4','5','6','7','LAST'];
 
-// 【安全】システムフォントの定義（ダウンロードなし）
+// 【B案】ローカルフォント設定
+// CSSの@font-faceで定義した名前('LocalRounded', 'LocalHand')を使用
 const FONT_OPTIONS = [
-  { label: '丸文字 (カワイイ)', value: '"Hiragino Maru Gothic ProN", "Rounded Mplus 1c", "Meiryo UI", "Arial Rounded MT Bold", sans-serif' },
+  { label: '丸ゴシック (推奨)', value: 'LocalRounded, sans-serif' },
+  { label: '手書き風 (ゆるふわ)', value: 'LocalHand, cursive' },
   { label: '標準 (ゴシック)', value: 'sans-serif' },
-  { label: '明朝 (キレイ)', value: '"Hiragino Mincho ProN", "Yu Mincho", "MS PMincho", serif' },
-  { label: 'デジタル (等幅)', value: '"Courier New", monospace' },
+  { label: '明朝体', value: 'serif' },
 ];
 
 export default function CalendarApp() {
@@ -69,10 +70,9 @@ export default function CalendarApp() {
   const [bgX, setBgX] = useState(50);
   const [bgY, setBgY] = useState(50);
   const [headerGap, setHeaderGap] = useState(20);
-  
   const [overlayOpacity, setOverlayOpacity] = useState(60);
 
-  // 【追加】フォント設定 (初期値: 丸文字)
+  // フォント設定 (初期値: ローカル丸ゴシック)
   const [titleFont, setTitleFont] = useState(FONT_OPTIONS[0].value);
   const [castFont, setCastFont] = useState(FONT_OPTIONS[0].value);
 
@@ -82,7 +82,6 @@ export default function CalendarApp() {
   ]);
   
   const [newCastNameInput, setNewCastNameInput] = useState('');
-  
   const [activeSettingsTab, setActiveSettingsTab] = useState<'none' | 'cast' | 'design'>('none');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -139,7 +138,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v44'); // Version 44
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v45'); // Version 45
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -155,7 +154,6 @@ export default function CalendarApp() {
         if (parsed.month) setMonth(parsed.month);
         if (parsed.isLogoWhite !== undefined) setIsLogoWhite(parsed.isLogoWhite);
         if (parsed.overlayOpacity !== undefined) setOverlayOpacity(parsed.overlayOpacity);
-        // フォント読み込み
         if (parsed.titleFont) setTitleFont(parsed.titleFont);
         if (parsed.castFont) setCastFont(parsed.castFont);
       }
@@ -182,7 +180,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity, titleFont, castFont
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v44', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v45', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -248,7 +246,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v44');
+      localStorage.removeItem('girlsbar_calendar_data_v45');
       window.location.reload();
     }
   };
@@ -311,14 +309,13 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存（シェア）: マスター版ロジック (ダブルショット 500ms) ---
+  // --- 自動保存（シェア） ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // 1. ダミー変換
       await toJpeg(calendarRef.current, {
         quality: 0.1,
         width: 1080, 
@@ -327,10 +324,8 @@ export default function CalendarApp() {
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
-      // 2. 待機 (500ms)
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. 本番変換
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
@@ -366,7 +361,7 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存: マスター版ロジック (ダブルショット 500ms) ---
+  // --- 長押し保存 ---
   const handleManualSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
@@ -426,8 +421,20 @@ export default function CalendarApp() {
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans text-gray-800 pb-20">
+      {/* 【B案】CSSでローカルフォントを定義 */}
+      <style jsx global>{`
+        @font-face {
+          font-family: 'LocalRounded';
+          src: url('/fonts/rounded.ttf') format('truetype');
+          font-display: swap;
+        }
+        @font-face {
+          font-family: 'LocalHand';
+          src: url('/fonts/hand.ttf') format('truetype');
+          font-display: swap;
+        }
+      `}</style>
       
-      {/* --- 画像生成モーダル --- */}
       {generatedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="text-white text-center mb-4 font-bold text-lg animate-pulse">
@@ -486,7 +493,7 @@ export default function CalendarApp() {
             </div>
           </div>
 
-          {/* 設定エリア (タブ式) */}
+          {/* 設定エリア */}
           {activeSettingsTab !== 'none' && (
             <div className="border-t pt-2 animate-in slide-in-from-top-2">
               <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
@@ -547,7 +554,7 @@ export default function CalendarApp() {
                     </div>
                   </div>
 
-                  {/* 【追加】フォント選択（安全なシステムフォントのみ） */}
+                  {/* フォント設定 (ローカルファイル使用) */}
                   <div className="border-t pt-2">
                     <label className="font-bold text-gray-600 text-xs mb-1 block flex items-center gap-1"><Type size={14}/> フォント</label>
                     <div className="grid grid-cols-2 gap-2 text-xs">
@@ -593,7 +600,6 @@ export default function CalendarApp() {
                     )}
                   </div>
 
-                  {/* 透過度スライダー */}
                   <div className="border-t pt-2">
                     <div className="flex items-center gap-2">
                        <Droplets size={14} className="text-gray-600"/>
@@ -632,17 +638,29 @@ export default function CalendarApp() {
              marginBottom: `-${(1080 * (1 - previewScale))}px`
            }}
         >
-          {/* 【重要】CSS背景画像方式（安定版） */}
           <div 
             ref={calendarRef} 
             className="bg-white min-w-[1080px] relative overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
-            style={{ 
-                backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
-                backgroundSize: `${bgZoom}%`,
-                backgroundPosition: `${bgX}% ${bgY}%`,
-                backgroundRepeat: 'no-repeat'
-            }}
           >
+            {/* 背景画像 */}
+            {backgroundImage && (
+              <div className="absolute inset-0 flex items-center justify-center z-0 overflow-hidden">
+                <img
+                  src={backgroundImage}
+                  style={{
+                    transform: `translate(${bgX}px, ${bgY}px) scale(${bgZoom / 100})`,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    maxWidth: 'none', 
+                    maxHeight: 'none'
+                  }}
+                  alt=""
+                  crossOrigin="anonymous" 
+                />
+              </div>
+            )}
+
             {/* コンテンツ */}
             <div className="relative z-10 pt-4 pb-6 px-8">
               <div className="text-center">
@@ -659,7 +677,7 @@ export default function CalendarApp() {
 
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* タイトル: 透過度スライダー連動 + フォント適用 */}
+                {/* タイトル */}
                 <h1 
                   className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
                   style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})`, fontFamily: titleFont }}
@@ -668,7 +686,7 @@ export default function CalendarApp() {
                 </h1>
               </div>
 
-              {/* カレンダー: 透過度スライダー連動 */}
+              {/* カレンダー */}
               <div 
                 className="border-4 border-gray-900 shadow-lg rounded-sm overflow-hidden mt-4"
                 style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})` }}
@@ -720,7 +738,6 @@ export default function CalendarApp() {
                             <div className="flex flex-col gap-1.5">
                               {shifts.filter(s => s.day === day).map(shift => (
                                 <div key={shift.id} className="flex items-stretch text-sm shadow-md relative group/chip transform transition-transform hover:scale-[1.02]">
-                                  {/* 【V42仕様】文字サイズ拡大: w-9, font-extrabold, text-sm */}
                                   <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-9 font-extrabold flex items-center justify-center text-sm rounded-l border-y border-l border-black/10`}>
                                     {SHIFT_STYLES[shift.type].label}
                                   </span>
@@ -729,7 +746,7 @@ export default function CalendarApp() {
                                     {shift.timeRange && <span className="text-[10px] opacity-90 mb-0.5 font-mono">{shift.timeRange}</span>}
                                     <span className="flex items-center gap-1 truncate w-full justify-center">
                                       {shift.isBD && <Cake size={10} className="text-yellow-400 fill-yellow-400 shrink-0"/>}
-                                      {/* フォント適用 */}
+                                      {/* キャスト名: フォント適用 */}
                                       <span className="truncate" style={{ fontFamily: castFont }}>{shift.castName}</span>
                                     </span>
                                   </div>
