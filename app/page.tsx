@@ -126,7 +126,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v42'); // Master Version
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v42_fix'); 
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -166,7 +166,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v42', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v42_fix', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -232,7 +232,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v42');
+      localStorage.removeItem('girlsbar_calendar_data_v42_fix');
       window.location.reload();
     }
   };
@@ -293,13 +293,14 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存（シェア） ---
+  // --- 自動保存（シェア）: 安定性重視 ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
+      // 1. ダミー変換: キャッシュとスタイルを確定させる
       await toJpeg(calendarRef.current, {
         quality: 0.1,
         width: 1080, 
@@ -308,8 +309,10 @@ export default function CalendarApp() {
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // 2. 待機: 以前より長めに取ってメモリ解放と描画完了を待つ (1000ms)
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
+      // 3. 本番変換
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
@@ -345,13 +348,14 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存 ---
+  // --- 長押し保存: 安定性重視 ---
   const handleManualSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
+      // 1. ダミー
       await toJpeg(calendarRef.current, {
         quality: 0.1,
         width: 1080,
@@ -360,8 +364,10 @@ export default function CalendarApp() {
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
       
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // 2. 待機 (1000ms)
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
+      // 3. 本番
       const dataUrl = await toJpeg(calendarRef.current, {
         quality: 0.95,
         width: 1080,
@@ -541,7 +547,7 @@ export default function CalendarApp() {
                       <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">拡大</span>
-                           <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="10" max="300" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">横</span>
@@ -555,6 +561,7 @@ export default function CalendarApp() {
                     )}
                   </div>
 
+                  {/* 透過度スライダー */}
                   <div className="border-t pt-2">
                     <div className="flex items-center gap-2">
                        <Droplets size={14} className="text-gray-600"/>
