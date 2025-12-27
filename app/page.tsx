@@ -65,6 +65,7 @@ export default function CalendarApp() {
   const [logoImage, setLogoImage] = useState<string | null>('/logo.png'); 
   const [isLogoWhite, setIsLogoWhite] = useState(false);
   
+  // 背景調整 (初期値はリセット)
   const [bgZoom, setBgZoom] = useState(100);
   const [bgX, setBgX] = useState(0);
   const [bgY, setBgY] = useState(0);
@@ -80,7 +81,7 @@ export default function CalendarApp() {
   
   const [newCastNameInput, setNewCastNameInput] = useState('');
   
-  // 設定タブ管理 ('none' | 'cast' | 'design')
+  // 設定タブ管理
   const [activeSettingsTab, setActiveSettingsTab] = useState<'none' | 'cast' | 'design'>('none');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -137,7 +138,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v36'); // Version 36
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v37'); // Version 37
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -178,7 +179,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, titleFont, castFont
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v36', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v37', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -244,7 +245,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v36');
+      localStorage.removeItem('girlsbar_calendar_data_v37');
       window.location.reload();
     }
   };
@@ -306,14 +307,14 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存 (添付コード準拠: 1回目jpeg -> 2回目blob) ---
+  // --- 自動保存（シェア） ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // 1. ダミー変換
+      // 1. ダミー変換 (JPEG)
       await toJpeg(calendarRef.current, {
         quality: 0.1,
         width: 1080, 
@@ -325,7 +326,7 @@ export default function CalendarApp() {
       // 2. 待機
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. 本番変換
+      // 3. 本番変換 (Blob)
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
@@ -361,7 +362,7 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存 (添付コード準拠: 1回目jpeg -> 2回目jpeg) ---
+  // --- 長押し保存 ---
   const handleManualSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
@@ -469,7 +470,6 @@ export default function CalendarApp() {
             </div>
 
             <div className="flex gap-2">
-              {/* 設定ボタン (タブ式) */}
               <button 
                 onClick={() => setActiveSettingsTab(activeSettingsTab === 'none' ? 'cast' : 'none')} 
                 className={`p-2 border rounded hover:bg-gray-100 text-gray-600 ${activeSettingsTab !== 'none' ? 'bg-blue-50 border-blue-300 text-blue-600' : 'border-gray-300'}`}
@@ -509,7 +509,7 @@ export default function CalendarApp() {
                 </button>
               </div>
 
-              {/* キャスト管理 */}
+              {/* キャスト管理タブ */}
               {activeSettingsTab === 'cast' && (
                 <div className="p-3 bg-gray-50 rounded border">
                   <div className="flex items-center justify-between mb-4 border-b pb-2">
@@ -535,7 +535,7 @@ export default function CalendarApp() {
                     <label className="block text-xs font-bold text-gray-500 mb-1">登録済みキャスト</label>
                     <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-1 bg-white rounded border border-gray-200">
                       {registeredCasts.map(name => (
-                        <span key={name} className="bg-gray-100 border border-gray-200 px-2 py-1 rounded text-xs flex items-center gap-1 font-bold text-gray-700">
+                        <span key={name} className="bg-gray-100 border border-gray-200 px-2 py-1 rounded text-xs flex items-center gap-1 font-bold text-gray-700 group">
                           {name}
                           <button onClick={() => removeCast(name)} className="text-gray-400 hover:text-red-500 p-0.5 rounded-full hover:bg-gray-200"><X size={12}/></button>
                         </span>
@@ -548,7 +548,7 @@ export default function CalendarApp() {
                 </div>
               )}
 
-              {/* デザイン調整 (フォント変更機能追加) */}
+              {/* デザイン調整タブ */}
               {activeSettingsTab === 'design' && (
                 <div className="p-3 bg-gray-50 rounded border space-y-3">
                   <div className="flex items-center justify-between">
@@ -593,15 +593,17 @@ export default function CalendarApp() {
                       <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">拡大</span>
-                           <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="10" max="300" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">横</span>
-                           <input type="range" min="-100" max="200" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           {/* 【重要】位置調整範囲をピクセル単位で大きく取る */}
+                           <input type="range" min="-500" max="500" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">縦</span>
-                           <input type="range" min="-100" max="200" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           {/* 【重要】位置調整範囲をピクセル単位で大きく取る */}
+                           <input type="range" min="-500" max="500" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                       </div>
                     )}
@@ -636,19 +638,34 @@ export default function CalendarApp() {
              marginBottom: `-${(1080 * (1 - previewScale))}px`
            }}
         >
+          {/* 【重要】背景画像を <img> タグで配置し、object-contain で全体を表示させる */}
+          {/* これなら「勝手にトリミング」されず、位置調整も transform で自由自在 */}
           <div 
             ref={calendarRef} 
-            // 【重要】CSS背景画像方式（安定版）
-            // 透過処理なし（白背景）
             className="bg-white min-w-[1080px] relative overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
-            style={{ 
-                backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
-                backgroundSize: `${bgZoom}%`,
-                backgroundPosition: `${bgX}% ${bgY}%`,
-                backgroundRepeat: 'no-repeat'
-            }}
           >
-            {/* コンテンツ */}
+            {/* 背景画像レイヤー */}
+            {backgroundImage && (
+              <div className="absolute inset-0 flex items-center justify-center z-0 overflow-hidden">
+                <img
+                  src={backgroundImage}
+                  style={{
+                    // 位置と拡大率を transform で制御 (画質劣化なし・自由自在)
+                    transform: `translate(${bgX}px, ${bgY}px) scale(${bgZoom / 100})`,
+                    // width/height: 100% と object-contain で「枠内に収まる最大サイズ」で表示
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    maxWidth: 'none', 
+                    maxHeight: 'none'
+                  }}
+                  alt=""
+                  crossOrigin="anonymous" 
+                />
+              </div>
+            )}
+
+            {/* コンテンツレイヤー */}
             <div className="relative z-10 pt-4 pb-6 px-8">
               <div className="text-center">
                 <div className="flex justify-center mb-0">
@@ -664,17 +681,16 @@ export default function CalendarApp() {
 
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* タイトル: 巨大化(text-6xl) + フォント適用 */}
+                {/* タイトル: フォント適用・文字サイズ大 */}
                 <h1 
-                  className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/90 inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
+                  className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md bg-white/95 inline-block px-8 py-2 rounded-full backdrop-blur-sm border-2 border-gray-900 relative z-20"
                   style={{ fontFamily: titleFont }}
                 >
                   {month}月{isSecondHalf ? '後半' : '前半'}シフト
                 </h1>
               </div>
 
-              {/* カレンダー本体 (透過なし: bg-white/90) */}
-              <div className="border-4 border-gray-900 bg-white/90 shadow-lg rounded-sm overflow-hidden mt-4">
+              <div className="border-4 border-gray-900 bg-white/95 shadow-lg rounded-sm overflow-hidden mt-4">
                 <div className="grid grid-cols-7 bg-gray-800 text-white font-bold text-center border-b-4 border-gray-900">
                   {['日', '月', '火', '水', '木', '金', '土'].map((d, i) => (
                     <div key={d} className={`py-3 text-lg border-r border-gray-600 last:border-r-0 ${i===0 ? 'text-pink-300' : ''} ${i===6 ? 'text-blue-300' : ''}`}>{d}</div>
@@ -729,7 +745,6 @@ export default function CalendarApp() {
                                     {shift.timeRange && <span className="text-[10px] opacity-90 mb-0.5 font-mono">{shift.timeRange}</span>}
                                     <span className="flex items-center gap-1 truncate w-full justify-center">
                                       {shift.isBD && <Cake size={10} className="text-yellow-400 fill-yellow-400 shrink-0"/>}
-                                      {/* キャスト名: フォント適用 */}
                                       <span className="truncate" style={{ fontFamily: castFont }}>{shift.castName}</span>
                                     </span>
                                   </div>
