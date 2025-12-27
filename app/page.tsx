@@ -738,16 +738,19 @@ export default function CalendarApp() {
                             <div className="flex flex-col gap-1.5">
                               {shifts.filter(s => s.day === day).map(shift => (
                                 <div key={shift.id} className="flex items-stretch text-sm shadow-md relative group/chip transform transition-transform hover:scale-[1.02]">
-                                  <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-9 font-extrabold flex items-center justify-center text-sm rounded-l border-y border-l border-black/10`}>
+                                  {/* 【修正】文字サイズ拡大: w-10, font-extrabold, text-base */}
+                                  <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-10 font-extrabold flex items-center justify-center text-base rounded-l border-y border-l border-black/10`}>
                                     {SHIFT_STYLES[shift.type].label}
                                   </span>
                                   
-                                  <div className={`bg-gray-900 text-white font-bold px-1 py-1 flex-1 flex flex-col justify-center items-center text-center leading-none border-l border-white/20 rounded-r border-y border-r border-black/10 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
+                                  {/* 【修正】パディング微増 (px-1.5) */}
+                                  <div className={`bg-gray-900 text-white font-bold px-1.5 py-1 flex-1 flex flex-col justify-center items-center text-center leading-none border-l border-white/20 rounded-r border-y border-r border-black/10 ${shift.isBD ? 'text-yellow-300 bg-gray-800' : ''}`}>
                                     {shift.timeRange && <span className="text-[10px] opacity-90 mb-0.5 font-mono">{shift.timeRange}</span>}
                                     <span className="flex items-center gap-1 truncate w-full justify-center">
-                                      {shift.isBD && <Cake size={10} className="text-yellow-400 fill-yellow-400 shrink-0"/>}
-                                      {/* キャスト名: フォント適用 */}
-                                      <span className="truncate" style={{ fontFamily: castFont }}>{shift.castName}</span>
+                                      {/* 【修正】アイコンサイズ拡大 (12) */}
+                                      {shift.isBD && <Cake size={12} className="text-yellow-400 fill-yellow-400 shrink-0"/>}
+                                      {/* 【修正】文字サイズ拡大 (text-base) */}
+                                      <span className="truncate text-base" style={{ fontFamily: castFont }}>{shift.castName}</span>
                                     </span>
                                   </div>
                                   
