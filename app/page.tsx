@@ -126,7 +126,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v42_fix'); 
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v42'); // Version 42
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -166,7 +166,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v42_fix', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v42', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -232,7 +232,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v42_fix');
+      localStorage.removeItem('girlsbar_calendar_data_v42');
       window.location.reload();
     }
   };
@@ -293,14 +293,13 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存（シェア）: 安定性重視 ---
+  // --- 自動保存（シェア） ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // 1. ダミー変換: キャッシュとスタイルを確定させる
       await toJpeg(calendarRef.current, {
         quality: 0.1,
         width: 1080, 
@@ -309,10 +308,8 @@ export default function CalendarApp() {
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
-      // 2. 待機: 以前より長めに取ってメモリ解放と描画完了を待つ (1000ms)
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. 本番変換
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
@@ -348,14 +345,13 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存: 安定性重視 ---
+  // --- 長押し保存 ---
   const handleManualSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
-      // 1. ダミー
       await toJpeg(calendarRef.current, {
         quality: 0.1,
         width: 1080,
@@ -364,10 +360,8 @@ export default function CalendarApp() {
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
       
-      // 2. 待機 (1000ms)
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. 本番
       const dataUrl = await toJpeg(calendarRef.current, {
         quality: 0.95,
         width: 1080,
@@ -411,10 +405,8 @@ export default function CalendarApp() {
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans text-gray-800 pb-20">
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Kaisei+Opti:wght@700&family=M+PLUS+Rounded+1c:wght@700&family=Noto+Sans+JP:wght@700&family=Noto+Serif+JP:wght@700&family=Yomogi&display=swap');
-      `}</style>
       
+      {/* --- 画像生成モーダル --- */}
       {generatedImage && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
           <div className="text-white text-center mb-4 font-bold text-lg animate-pulse">
@@ -547,15 +539,16 @@ export default function CalendarApp() {
                       <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">拡大</span>
+                           {/* トリミング対策: 最小値10% */}
                            <input type="range" min="10" max="300" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">横</span>
-                           <input type="range" min="-500" max="500" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="0" max="100" value={bgX} onChange={(e) => setBgX(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">縦</span>
-                           <input type="range" min="-500" max="500" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="0" max="100" value={bgY} onChange={(e) => setBgY(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                       </div>
                     )}
@@ -627,7 +620,7 @@ export default function CalendarApp() {
 
                 <div style={{ height: `${headerGap}px` }} className="transition-all duration-300"></div>
 
-                {/* タイトル: 透過度スライダー連動 */}
+                {/* タイトル */}
                 <h1 
                   className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
                   style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})` }}
@@ -636,7 +629,7 @@ export default function CalendarApp() {
                 </h1>
               </div>
 
-              {/* カレンダー: 透過度スライダー連動 */}
+              {/* カレンダー */}
               <div 
                 className="border-4 border-gray-900 shadow-lg rounded-sm overflow-hidden mt-4"
                 style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})` }}
