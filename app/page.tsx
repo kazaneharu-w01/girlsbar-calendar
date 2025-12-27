@@ -63,10 +63,6 @@ export default function CalendarApp() {
   // 透過度設定 (初期値60%)
   const [overlayOpacity, setOverlayOpacity] = useState(60);
 
-  // 【変更】デフォルトフォントを「丸ゴシック」に設定
-  const [titleFont, setTitleFont] = useState('"M PLUS Rounded 1c", sans-serif');
-  const [castFont, setCastFont] = useState('"M PLUS Rounded 1c", sans-serif');
-
   const [registeredCasts, setRegisteredCasts] = useState<string[]>([
     'もねまろ', 'ころすけ', 'あんそにー', 'たろう', 'ななし',
     'てんか', 'かずと', 'よう', 'ゆえ', 'ひな', 'むつ'
@@ -130,7 +126,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v43'); // Version 43
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v42'); // Master Version
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -170,7 +166,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v43', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v42', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -236,7 +232,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v43');
+      localStorage.removeItem('girlsbar_calendar_data_v42');
       window.location.reload();
     }
   };
@@ -545,7 +541,7 @@ export default function CalendarApp() {
                       <div className="bg-white p-2 rounded border border-gray-200 space-y-2">
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">拡大</span>
-                           <input type="range" min="10" max="300" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                           <input type="range" min="50" max="200" value={bgZoom} onChange={(e) => setBgZoom(Number(e.target.value))} className="flex-1 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         </div>
                         <div className="flex items-center gap-2">
                            <span className="text-xs font-bold w-8 text-right">横</span>
@@ -601,27 +597,14 @@ export default function CalendarApp() {
           <div 
             ref={calendarRef} 
             className="bg-white min-w-[1080px] relative overflow-hidden min-h-[1350px] shadow-2xl rounded-lg"
+            style={{ 
+                backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
+                backgroundSize: `${bgZoom}%`,
+                backgroundPosition: `${bgX}% ${bgY}%`,
+                backgroundRepeat: 'no-repeat'
+            }}
           >
-            {/* 背景画像レイヤー */}
-            {backgroundImage && (
-              <div className="absolute inset-0 flex items-center justify-center z-0 overflow-hidden">
-                <img
-                  src={backgroundImage}
-                  style={{
-                    transform: `translate(${bgX}px, ${bgY}px) scale(${bgZoom / 100})`,
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    maxWidth: 'none', 
-                    maxHeight: 'none'
-                  }}
-                  alt=""
-                  crossOrigin="anonymous" 
-                />
-              </div>
-            )}
-
-            {/* コンテンツレイヤー */}
+            {/* コンテンツ */}
             <div className="relative z-10 pt-4 pb-6 px-8">
               <div className="text-center">
                 <div className="flex justify-center mb-0">
@@ -640,7 +623,7 @@ export default function CalendarApp() {
                 {/* タイトル: 透過度スライダー連動 */}
                 <h1 
                   className="text-6xl font-black tracking-wider mb-2 text-gray-900 drop-shadow-md inline-block px-8 py-2 rounded-full border-2 border-gray-900 relative z-20"
-                  style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})`, fontFamily: titleFont }}
+                  style={{ backgroundColor: `rgba(255,255,255, ${overlayOpacity/100})` }}
                 >
                   {month}月{isSecondHalf ? '後半' : '前半'}シフト
                 </h1>
@@ -698,6 +681,7 @@ export default function CalendarApp() {
                             <div className="flex flex-col gap-1.5">
                               {shifts.filter(s => s.day === day).map(shift => (
                                 <div key={shift.id} className="flex items-stretch text-sm shadow-md relative group/chip transform transition-transform hover:scale-[1.02]">
+                                  {/* 【修正】文字サイズ拡大: w-9, font-extrabold, text-sm */}
                                   <span className={`${SHIFT_STYLES[shift.type].bg} ${SHIFT_STYLES[shift.type].text} w-9 font-extrabold flex items-center justify-center text-sm rounded-l border-y border-l border-black/10`}>
                                     {SHIFT_STYLES[shift.type].label}
                                   </span>
@@ -706,7 +690,7 @@ export default function CalendarApp() {
                                     {shift.timeRange && <span className="text-[10px] opacity-90 mb-0.5 font-mono">{shift.timeRange}</span>}
                                     <span className="flex items-center gap-1 truncate w-full justify-center">
                                       {shift.isBD && <Cake size={10} className="text-yellow-400 fill-yellow-400 shrink-0"/>}
-                                      <span className="truncate" style={{ fontFamily: castFont }}>{shift.castName}</span>
+                                      <span className="truncate">{shift.castName}</span>
                                     </span>
                                   </div>
                                   
