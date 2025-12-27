@@ -33,6 +33,7 @@ type BackupData = {
   overlayOpacity: number;
 };
 
+// 【変更点1】バッジのスタイル定義（文字サイズ等はJSX側で上書き調整）
 const SHIFT_STYLES: Record<ShiftType, { bg: string; text: string; label: string }> = {
   '早': { bg: 'bg-[#FF0055]', text: 'text-white', label: '早' },
   '遅': { bg: 'bg-[#008080]', text: 'text-white', label: '遅' },
@@ -126,7 +127,7 @@ export default function CalendarApp() {
 
   useEffect(() => {
     try {
-      const savedData = localStorage.getItem('girlsbar_calendar_data_v42_fix2'); 
+      const savedData = localStorage.getItem('girlsbar_calendar_data_v42'); // Master Version (V42)
       if (savedData) {
         const parsed = JSON.parse(savedData);
         if (parsed.shifts) setShifts(parsed.shifts);
@@ -166,7 +167,7 @@ export default function CalendarApp() {
       year, month, bgZoom, bgX, bgY, headerGap, isLogoWhite, overlayOpacity
     };
     try {
-      localStorage.setItem('girlsbar_calendar_data_v42_fix2', JSON.stringify(dataToSave));
+      localStorage.setItem('girlsbar_calendar_data_v42', JSON.stringify(dataToSave));
       setSaveError(null);
     } catch (e: any) {
       if (e.name === 'QuotaExceededError') setSaveError('保存容量不足。背景を削除してください。');
@@ -232,7 +233,7 @@ export default function CalendarApp() {
 
   const resetAllData = () => {
     if (confirm('全てのデータを削除して初期状態に戻しますか？')) {
-      localStorage.removeItem('girlsbar_calendar_data_v42_fix2');
+      localStorage.removeItem('girlsbar_calendar_data_v42');
       window.location.reload();
     }
   };
@@ -293,13 +294,14 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 自動保存（シェア）: 安定版 ---
+  // --- 自動保存（シェア）: マスター版ロジック (ダブルショット 500ms) ---
   const handleAutoSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
     window.scrollTo(0, 0);
 
     try {
+      // 1. ダミー変換
       await toJpeg(calendarRef.current, {
         quality: 0.1,
         width: 1080, 
@@ -308,8 +310,10 @@ export default function CalendarApp() {
         style: { transform: 'none', transformOrigin: 'top left', margin: '0', padding: '0' } 
       });
 
+      // 2. 待機 (500ms)
       await new Promise(resolve => setTimeout(resolve, 500));
 
+      // 3. 本番変換
       const blob = await toBlob(calendarRef.current, {
         quality: 0.95,
         width: 1080, 
@@ -345,7 +349,7 @@ export default function CalendarApp() {
     }
   };
 
-  // --- 長押し保存: 安定版 ---
+  // --- 長押し保存: マスター版ロジック (ダブルショット 500ms) ---
   const handleManualSave = async () => {
     if (!calendarRef.current || isGenerating) return;
     setIsGenerating(true);
